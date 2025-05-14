@@ -65,7 +65,8 @@ $RECYCLE.BIN/
 # Logs and databases
 ############################
 
-.tmp
+# Permitimos archivos en .tmp
+# .tmp
 *.log
 *.sql
 *.sqlite
@@ -124,11 +125,20 @@ coverage
 #.env
 license.txt
 exports
-.strapi
+# Permitimos la carpeta .strapi
+# .strapi
 dist
 build
-.strapi-updater.json
+# Permitimos archivos importantes de configuración
+# .strapi-updater.json
 .strapi-cloud.json
+
+# Archivos a incluir explícitamente
+!.tmp/
+!.tmp/**
+!.strapi/
+!.strapi/**
+!.strapi-updater.json
 
 # Edita el .gitignore y agrega estas líneas
 !.tmp/data.db
