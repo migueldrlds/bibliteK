@@ -875,13 +875,24 @@ function PrestamosContent(): JSX.Element | null {
 
   const handleRenewal = async (loan: UILoan) => {
     try {
+      console.log("Intentando renovar préstamo:", loan);
       // Verificar si ya alcanzó el límite de renovaciones según la clasificación del libro
-      const bookInfo = allBooks.find(book => 
-        book.id.toString() === loan.bookId.toString() || 
-        book.id_libro === loan.bookId.toString()
-      );
+      const bookInfo = allBooks.find(book => {
+        // Comparación más segura de IDs
+        const bookIdMatch = book.id?.toString() === loan.bookId?.toString();
+        const bookIdLibroMatch = book.id_libro?.toString() === loan.bookId?.toString();
+        return bookIdMatch || bookIdLibroMatch;
+      });
       
-      const maxRenovaciones = (bookInfo?.clasificacion || "").toLowerCase() === "literatura" ? 2 : 1;
+      console.log("Libro encontrado para renovación:", bookInfo);
+      
+      // Determinar clasificación del libro y máximo de renovaciones
+      const clasificacion = bookInfo?.clasificacion?.toLowerCase() || "";
+      const esLiteratura = clasificacion.includes("literatura");
+      const maxRenovaciones = esLiteratura ? 2 : 1;
+      
+      console.log("Clasificación:", clasificacion, "Es literatura:", esLiteratura, "Max renovaciones:", maxRenovaciones);
+      console.log("Renovaciones actuales:", loan.renewalCount);
       
       if (loan.renewalCount >= maxRenovaciones) {
         toast({
@@ -911,13 +922,25 @@ function PrestamosContent(): JSX.Element | null {
     if (!selectedLoan || !renewalDate) return;
 
     try {
-      // Verificar nuevamente el límite de renovaciones según clasificación
-      const bookInfo = allBooks.find(book => 
-        book.id.toString() === selectedLoan.bookId.toString() || 
-        book.id_libro === selectedLoan.bookId.toString()
-      );
+      console.log("Confirmando renovación para préstamo:", selectedLoan);
       
-      const maxRenovaciones = (bookInfo?.clasificacion || "").toLowerCase() === "literatura" ? 2 : 1;
+      // Verificar nuevamente el límite de renovaciones según clasificación
+      const bookInfo = allBooks.find(book => {
+        // Comparación más segura de IDs
+        const bookIdMatch = book.id?.toString() === selectedLoan.bookId?.toString();
+        const bookIdLibroMatch = book.id_libro?.toString() === selectedLoan.bookId?.toString();
+        return bookIdMatch || bookIdLibroMatch;
+      });
+      
+      console.log("Libro encontrado para confirmación:", bookInfo);
+      
+      // Determinar clasificación del libro y máximo de renovaciones
+      const clasificacion = bookInfo?.clasificacion?.toLowerCase() || "";
+      const esLiteratura = clasificacion.includes("literatura");
+      const maxRenovaciones = esLiteratura ? 2 : 1;
+      
+      console.log("Clasificación:", clasificacion, "Es literatura:", esLiteratura, "Max renovaciones:", maxRenovaciones);
+      console.log("Renovaciones actuales:", selectedLoan.renewalCount);
       
       if (selectedLoan.renewalCount >= maxRenovaciones) {
         toast({
@@ -1617,63 +1640,25 @@ function PrestamosContent(): JSX.Element | null {
                         </div>
                       </TableCell>
                           <TableCell className="px-4 py-2">
-                            <div className="flex justify-center gap-1">
-                              {/* Botones de acciones directas */}
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 opacity-50 group-hover:opacity-100"
-                                onClick={() => {
-                                  setSelectedLoan(loan);
-                                  setShowDetailsDialog(true);
-                                }}
-                                title="Ver detalles"
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                              
-                              {loan.status === "activo" && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-blue-500 opacity-50 group-hover:opacity-100"
-                                  onClick={() => handleRenewal(loan)}
-                                  title="Renovar préstamo"
-                                >
-                                  <RotateCw className="h-4 w-4" />
-                                </Button>
-                              )}
-                              
-                              {["activo", "renovado", "atrasado"].includes(loan.status) && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-emerald-500 opacity-50 group-hover:opacity-100"
-                                  onClick={() => handleReturn(loan)}
-                                  title="Marcar como devuelto"
-                                >
-                                  <BookCheck className="h-4 w-4" />
-                                </Button>
-                              )}
-                              
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
+                            <div className="flex justify-center">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
                                   <Button 
                                     variant="ghost" 
                                     size="icon" 
-                                    className="h-8 w-8 opacity-50 group-hover:opacity-100"
+                                    className="h-8 w-8"
                                   >
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-56">
-                              <DropdownMenuLabel>Acciones</DropdownMenuLabel>
-                              <DropdownMenuSeparator />
-                          {renderActionMenu(loan)}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </TableCell>
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-56">
+                                  <DropdownMenuLabel>Acciones</DropdownMenuLabel>
+                                  <DropdownMenuSeparator />
+                                  {renderActionMenu(loan)}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </TableCell>
                     </TableRow>
                   ))}
               </TableBody>
@@ -2586,13 +2571,22 @@ function PrestamosContent(): JSX.Element | null {
             </Button>
             <Button 
               onClick={confirmRenewal}
-              disabled={!renewalDate || (selectedLoan?.renewalCount ?? 0) >= (
-                // Verificar si el libro es de clasificación literatura (2 renovaciones) o no (1 renovación)
-                (allBooks.find(book => 
-                  book.id?.toString() === selectedLoan?.bookId?.toString() || 
-                  book.id_libro === selectedLoan?.bookId?.toString()
-                )?.clasificacion || "").toLowerCase() === "literatura" ? 2 : 1
-              )}
+              disabled={!renewalDate || (selectedLoan ? (() => {
+                // Buscar el libro de manera más segura
+                const bookInfo = allBooks.find(book => {
+                  const bookIdMatch = book.id?.toString() === selectedLoan.bookId?.toString();
+                  const bookIdLibroMatch = book.id_libro?.toString() === selectedLoan.bookId?.toString();
+                  return bookIdMatch || bookIdLibroMatch;
+                });
+                
+                // Determinar límite de renovaciones de manera más robusta
+                const clasificacion = bookInfo?.clasificacion?.toLowerCase() || "";
+                const esLiteratura = clasificacion.includes("literatura");
+                const maxRenovaciones = esLiteratura ? 2 : 1;
+                
+                // Verificar si ya alcanzó el límite
+                return (selectedLoan.renewalCount || 0) >= maxRenovaciones;
+              })() : true)}
               className="bg-blue-600 hover:bg-blue-700"
             >
               <RotateCw className="mr-2 h-4 w-4" />
