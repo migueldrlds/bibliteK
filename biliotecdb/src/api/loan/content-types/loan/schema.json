@@ -1,0 +1,70 @@
+{
+  "kind": "collectionType",
+  "collectionName": "loans",
+  "info": {
+    "singularName": "loan",
+    "pluralName": "loans",
+    "displayName": "loan",
+    "description": ""
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "attributes": {
+    "book": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::book.book",
+      "inversedBy": "loans"
+    },
+    "usuario": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user",
+      "inversedBy": "loans"
+    },
+    "fecha_prestamo": {
+      "type": "datetime",
+      "required": true
+    },
+    "fecha_devolucion_esperada": {
+      "type": "datetime",
+      "required": true
+    },
+    "fecha_devolucion_real": {
+      "type": "datetime"
+    },
+    "estado": {
+      "type": "enumeration",
+      "enum": [
+        "activo",
+        "devuelto",
+        "renovado",
+        "atrasado",
+        "perdido"
+      ]
+    },
+    "notas": {
+      "type": "string"
+    },
+    "campus_origen": {
+      "type": "enumeration",
+      "enum": [
+        "Tomas Aquino",
+        "Otay"
+      ]
+    },
+    "multa": {
+      "type": "integer"
+    },
+    "renewalCount": {
+      "type": "integer",
+      "default": 0,
+      "max": 2,
+      "min": 0
+    },
+    "dias_atraso": {
+      "type": "integer"
+    }
+  }
+}
