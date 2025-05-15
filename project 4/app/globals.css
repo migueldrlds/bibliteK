@@ -56,6 +56,49 @@
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
   }
+  /* Tema TEC con azul #1b396a para encabezado y fondo blanco para contenido */
+  .tec {
+    /* Fondo blanco para el contenido principal */
+    --background: 0 0% 100%; /* Blanco */
+    --foreground: 216 75% 16%; /* Texto azul oscuro para contraste */
+    
+    /* Tarjetas/paneles más blancos con bordes sutiles */
+    --card: 0 0% 100%;
+    --card-foreground: 216 75% 16%;
+    
+    --popover: 0 0% 100%;
+    --popover-foreground: 216 75% 16%;
+    
+    /* Elementos primarios en azul institucional */
+    --primary: 216 60% 26%; /* #1b396a - azul institucional */
+    --primary-foreground: 0 0% 100%; /* Texto blanco */
+    
+    /* Elementos secundarios en azul más claro */
+    --secondary: 214 59% 35%; 
+    --secondary-foreground: 0 0% 100%;
+    
+    /* Elementos atenuados */
+    --muted: 210 20% 96%;
+    --muted-foreground: 215 25% 40%;
+    
+    /* Elementos de acento en azul */
+    --accent: 215 55% 95%;
+    --accent-foreground: 216 60% 26%;
+    
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 216 60% 26%;
+    
+    /* Colores para gráficos y visualizaciones */
+    --chart-1: 45 80% 65%; /* Amarillo/dorado para contraste */
+    --chart-2: 200 75% 60%; /* Azul claro */
+    --chart-3: 175 65% 55%; /* Verde azulado */
+    --chart-4: 325 70% 60%; /* Rosa */
+    --chart-5: 150 60% 50%; /* Verde */
+  }
 }
 
 @layer base {
@@ -65,6 +108,38 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Estilos específicos para el tema TEC */
+.tec header,
+.tec .header,
+.tec [role="banner"],
+.tec .navbar,
+.tec nav[class*="main"] {
+  background-color: #1b396a;
+  color: white;
+}
+
+/* Asegurar que los botones y enlaces en el header mantengan el color blanco */
+.tec header a,
+.tec .header a,
+.tec [role="banner"] a,
+.tec .navbar a,
+.tec nav[class*="main"] a,
+.tec header button,
+.tec .header button,
+.tec [role="banner"] button,
+.tec .navbar button,
+.tec nav[class*="main"] button {
+  color: white;
+}
+
+.tec header .logo,
+.tec .header .logo,
+.tec [role="banner"] .logo,
+.tec .navbar .logo,
+.tec nav[class*="main"] .logo {
+  filter: brightness(0) invert(1); /* Hacer que los logotipos sean blancos */
 }
 
 @layer utilities {
