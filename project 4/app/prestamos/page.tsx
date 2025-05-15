@@ -10,6 +10,7 @@ import { DashboardLayout } from "@/components/dashboard/layout";
 import { loanService, Loan, LoanData } from "@/services/loanService";
 import { bookService, Book } from '@/services/bookService';
 import { userService } from '@/services/userService';
+import { Holiday, holidayService } from '@/services/holidayService';
 import {
   Form,
   FormControl,
@@ -81,6 +82,8 @@ import {
   School,
   ChevronLeft,
   ChevronRight,
+  BadgeX,
+  Info,
 } from "lucide-react";
 import {
   Table,
@@ -115,6 +118,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useUser } from "@/context/user-context";
+import { DayClickEventHandler, DayContent, DayContentProps } from "react-day-picker";
 
 // Helper function to get status badge
 const getStatusBadge = (status: string) => {
@@ -380,9 +384,16 @@ function PrestamosContent(): JSX.Element | null {
   const [displayCount, setDisplayCount] = useState(50); // Número de préstamos a mostrar
   const { permissions, isAuthenticated, loading: userLoading } = useUser();
   const router = useRouter();
-  // Eliminar el estado para días feriados globales
-  // Estado para días feriados individuales (para cada préstamo)
+  // Estado para días feriados
   const [holidayDaysByLoan, setHolidayDaysByLoan] = useState<Record<string | number, number>>({});
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [showHolidayModal, setShowHolidayModal] = useState(false);
+  const [loadingHolidays, setLoadingHolidays] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [isHolidayUpdating, setIsHolidayUpdating] = useState(false);
+  
+  // Nuevo estado para trackear días específicos en proceso de carga
+  const [loadingDates, setLoadingDates] = useState<{[key: string]: boolean}>({});
   
   // Estados para el modal de creación de préstamos
   const [isCreateLoanModalOpen, setIsCreateLoanModalOpen] = useState(false);
@@ -413,6 +424,97 @@ function PrestamosContent(): JSX.Element | null {
   const [isLoadingBooks, setIsLoadingBooks] = useState(false);
   const [searchBookError, setSearchBookError] = useState<string | null>(null);
 
+  // Función para normalizar texto (eliminar acentos)
+  const normalizeString = (text: string | null | undefined): string => {
+    if (!text) return "";
+    // Convertir a minúsculas y eliminar acentos
+    return text.toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, ""); // Elimina todos los diacríticos (acentos, tildes, etc.)
+  };
+
+  // Función para cargar días feriados desde el backend con menos impacto en la UI
+  const loadHolidays = async (showLoadingState = true) => {
+    try {
+      if (showLoadingState) {
+        setLoadingHolidays(true);
+      }
+      
+      console.log("Cargando días feriados...");
+      
+      // Llamar a getHolidays sin parámetros
+      const response = await holidayService.getHolidays();
+      console.log("Respuesta de días feriados:", response);
+      
+      // Manejar diferentes formatos de respuesta
+      if (Array.isArray(response)) {
+        // Si la respuesta es directamente un array de feriados
+        console.log("Formato de respuesta: array directo");
+        setHolidays(response);
+      } else if (response && typeof response === 'object') {
+        // Si la respuesta es un objeto con una propiedad data
+        if ('data' in response && Array.isArray((response as any).data)) {
+          console.log("Formato de respuesta: objeto con data[]");
+          setHolidays((response as any).data);
+        } else {
+          console.error("Respuesta con formato inesperado:", response);
+          setHolidays([]);
+        }
+      } else {
+        console.error("Formato de datos de holidays inesperado:", response);
+        setHolidays([]);
+      }
+    } catch (error) {
+      console.error('Error al cargar días feriados:', error);
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar los días feriados",
+        variant: "destructive",
+      });
+    } finally {
+      if (showLoadingState) {
+        setLoadingHolidays(false);
+      }
+    }
+  };
+
+  // Función para calcular automáticamente los días feriados aplicables a un préstamo
+  const calcularDiasFeriados = (loan: UILoan): number => {
+    if (!loan) return 0;
+    
+    try {
+      const dueDate = new Date(loan.returnDate);
+      const today = new Date();
+      
+      // Si la fecha de vencimiento es posterior a hoy, no hay multa
+      if (dueDate >= today) return 0;
+      
+      // Calcular días feriados entre fecha de devolución y hoy
+      let holidayCount = 0;
+      
+      for (const holiday of holidays) {
+        const holidayDate = new Date(holiday.date);
+        // Normalizar las fechas para comparación (solo fecha, sin hora)
+        holidayDate.setHours(0, 0, 0, 0);
+        
+        // Verificar si el día feriado está entre la fecha de devolución y hoy
+        // y si es un día laborable (lunes a viernes)
+        const isBusinessDay = holidayDate.getDay() !== 0 && holidayDate.getDay() !== 6;
+        
+        if (isBusinessDay && 
+            holidayDate > dueDate && 
+            holidayDate <= today) {
+          holidayCount++;
+        }
+      }
+      
+      return holidayCount;
+    } catch (error) {
+      console.error("Error al calcular días feriados:", error);
+      return 0;
+    }
+  };
+
   // Función para buscar libros usando la misma estructura que el catálogo
   const searchBooks = async (page = 1, searchTerm = newLoanBookSearchTerm) => {
     try {
@@ -433,7 +535,6 @@ function PrestamosContent(): JSX.Element | null {
         filters['filters[$or][3][clasificacion][$containsi]'] = searchTerm;
       }
 
-      console.log("Buscando libros con filtros:", filters);
       const response = await bookService.getBooks(filters);
       
       if (response && response.data) {
@@ -449,6 +550,8 @@ function PrestamosContent(): JSX.Element | null {
       setIsLoadingBooks(false);
     }
   };
+
+  // TODOS LOS USEEFFECT JUNTOS
 
   // Reemplazar el efecto de filtrado existente con la llamada a la API
   useEffect(() => {
@@ -469,6 +572,14 @@ function PrestamosContent(): JSX.Element | null {
     }
   }, [permissions, isAuthenticated, router]);
 
+  // Cargar días feriados al inicio
+  useEffect(() => {
+    if (isAuthenticated && permissions?.canAccessPrestamos) {
+      loadHolidays();
+    }
+  }, [isAuthenticated, permissions]);
+
+  // Cargar datos de préstamos y libros
   useEffect(() => {
     const fetchLoans = async () => {
       try {
@@ -539,7 +650,6 @@ function PrestamosContent(): JSX.Element | null {
         // Cargar datos para el modal de creación de préstamos
         try {
           const booksData = await bookService.getBooks();
-          console.log("DATOS DE LIBROS RECIBIDOS:", booksData.data);
           
           // Procesar los libros con su inventario
           const booksWithInventory = procesarInventarioDeLibros(booksData.data);
@@ -569,35 +679,29 @@ function PrestamosContent(): JSX.Element | null {
     fetchLoans();
   }, [toast, permissions, userLoading]);
 
-  // Filtrar libros basados en el término de búsqueda
+  // Calcular días feriados para cada préstamo cuando se cargan los préstamos y los días feriados
   useEffect(() => {
-    if (!newLoanBookSearchTerm.trim() || !allBooks.length) {
-      setFilteredNewLoanBooks(allBooks);
-      return;
+    // Solo ejecutar si tenemos préstamos y días feriados cargados
+    if (loans.length > 0 && holidays.length > 0) {
+      console.log("Calculando días feriados para todos los préstamos...");
+      
+      // Objeto temporal para almacenar los días feriados por préstamo
+      const holidayDays: Record<string | number, number> = {};
+      
+      // Calcular para cada préstamo
+      loans.forEach(loan => {
+        if (loan.status === "atrasado" || (loan.status === "devuelto" && loan.multa && loan.multa > 0)) {
+          const feriados = calcularDiasFeriados(loan);
+          holidayDays[loan.id] = feriados;
+        }
+      });
+      
+      // Actualizar el estado
+      setHolidayDaysByLoan(holidayDays);
+      
+      console.log("Días feriados calculados:", holidayDays);
     }
-    
-    const searchTerm = newLoanBookSearchTerm.toLowerCase();
-    
-    // Usar una búsqueda más completa similar a la de catálogo
-    const filtered = allBooks.filter(book => {
-      // Buscar en múltiples campos (similar a catálogo)
-      return (
-        book.titulo?.toLowerCase().includes(searchTerm) || 
-        book.autor?.toLowerCase().includes(searchTerm) ||
-        book.id_libro?.toLowerCase().includes(searchTerm) ||
-        book.clasificacion?.toLowerCase().includes(searchTerm)
-      );
-    });
-    
-    // Ordenar resultados: primero los que coinciden con el inicio del título
-    filtered.sort((a, b) => {
-      const aStartsWithTitle = a.titulo?.toLowerCase().startsWith(searchTerm) ? -1 : 0;
-      const bStartsWithTitle = b.titulo?.toLowerCase().startsWith(searchTerm) ? -1 : 0;
-      return aStartsWithTitle - bStartsWithTitle;
-    });
-    
-    setFilteredNewLoanBooks(filtered);
-  }, [newLoanBookSearchTerm, allBooks]);
+  }, [loans, holidays]);
 
   // Filtrar usuarios basados en el término de búsqueda
   useEffect(() => {
@@ -606,11 +710,11 @@ function PrestamosContent(): JSX.Element | null {
       return;
     }
     
-    const searchTerm = newLoanUserSearchTerm.toLowerCase();
+    const normalizedSearchTerm = normalizeString(newLoanUserSearchTerm);
     const filtered = allUsers.filter(user => 
-      user.username?.toLowerCase().includes(searchTerm) || 
-      user.email?.toLowerCase().includes(searchTerm) ||
-      user.Numcontrol?.toLowerCase().includes(searchTerm)
+      normalizeString(user.username).includes(normalizedSearchTerm) || 
+      normalizeString(user.email).includes(normalizedSearchTerm) ||
+      normalizeString(user.Numcontrol).includes(normalizedSearchTerm)
     );
     
     setFilteredNewLoanUsers(filtered);
@@ -633,6 +737,21 @@ function PrestamosContent(): JSX.Element | null {
   // Redirigir si no tiene permisos
   if (!permissions.canAccessPrestamos) {
     return null; // El useEffect ya maneja la redirección
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h2 className="text-3xl font-bold tracking-tight">Préstamos</h2>
+            <p className="text-muted-foreground">
+              Cargando préstamos...
+            </p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const handleNewLoanBookSelect = (book: BookWithInventory) => {
@@ -814,14 +933,14 @@ function PrestamosContent(): JSX.Element | null {
       }
       // Filter by search term
       if (searchTerm) {
-        const searchLower = searchTerm.toLowerCase();
+        const normalizedSearchTerm = normalizeString(searchTerm);
         return (
-          loan.book.toLowerCase().includes(searchLower) ||
-          loan.user.toLowerCase().includes(searchLower) ||
-          loan.id.toString().includes(searchLower) ||
-          (loan.campus_origen && loan.campus_origen.toLowerCase().includes(searchLower)) ||
-          (loan.userNumControl && loan.userNumControl.toLowerCase().includes(searchLower)) ||
-          (loan.userCarrera && loan.userCarrera.toLowerCase().includes(searchLower))
+          normalizeString(loan.book).includes(normalizedSearchTerm) ||
+          normalizeString(loan.user).includes(normalizedSearchTerm) ||
+          loan.id.toString().includes(normalizedSearchTerm) ||
+          (loan.campus_origen && normalizeString(loan.campus_origen).includes(normalizedSearchTerm)) ||
+          (loan.userNumControl && normalizeString(loan.userNumControl).includes(normalizedSearchTerm)) ||
+          (loan.userCarrera && normalizeString(loan.userCarrera).includes(normalizedSearchTerm))
         );
       }
       return true;
@@ -842,14 +961,28 @@ function PrestamosContent(): JSX.Element | null {
       const dateObj = parseISO(date);
       if (includeTime) {
         // Para formato con hora (hh:mm a) - formato 12 horas
+        // Primero obtenemos las partes por separado
+        const day = format(dateObj, "dd", { locale: es });
+        const month = format(dateObj, "MMM", { locale: es });
+        const year = format(dateObj, "yyyy", { locale: es });
+        // Capitalizamos el mes
+        const capitalizedMonth = month.charAt(0).toUpperCase() + month.slice(1);
+        
         return {
-          date: format(dateObj, "dd MMM yyyy", { locale: es }),
+          date: `${day} ${capitalizedMonth} ${year}`,
           time: format(dateObj, "hh:mm a", { locale: es }).toLowerCase()
         };
       } else {
         // Solo fecha
+        // Primero obtenemos las partes por separado
+        const day = format(dateObj, "dd", { locale: es });
+        const month = format(dateObj, "MMM", { locale: es });
+        const year = format(dateObj, "yyyy", { locale: es });
+        // Capitalizamos el mes
+        const capitalizedMonth = month.charAt(0).toUpperCase() + month.slice(1);
+        
         return {
-          date: format(dateObj, "dd MMM yyyy", { locale: es })
+          date: `${day} ${capitalizedMonth} ${year}`
         };
       }
     } catch (e) {
@@ -1131,6 +1264,9 @@ function PrestamosContent(): JSX.Element | null {
     let displayMulta = loan.multa || 0;
     let displayDiasAtraso = loan.dias_atraso || 0;
     
+    // Obtener los días feriados para este préstamo
+    const holidayCount = holidayDaysByLoan[loan.id] || 0;
+    
     // Para préstamos atrasados sin multa calculada, mostrar la multa estimada
     if (loan.status === "atrasado" && displayMulta === 0) {
       const today = new Date();
@@ -1140,8 +1276,8 @@ function PrestamosContent(): JSX.Element | null {
         try {
           // Calcular solo días laborables usando loanService directamente
           const daysLate = loanService.calculateBusinessDays(dueDate, today);
-          // No restar días feriados aquí, solo mostrar el cálculo básico
-          displayDiasAtraso = daysLate;
+          // Aplicar descuento por días feriados
+          displayDiasAtraso = Math.max(0, daysLate - holidayCount);
           // Solo aplicar multa si realmente hay días de atraso
           displayMulta = displayDiasAtraso > 0 ? displayDiasAtraso * 10 : 0; // $10 por día laborable de atraso
         } catch (error) {
@@ -1149,8 +1285,8 @@ function PrestamosContent(): JSX.Element | null {
           // Fallback simple en caso de error
         const diffTime = Math.abs(today.getTime() - dueDate.getTime());
           const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          displayDiasAtraso = diffDays;
-          displayMulta = diffDays * 10;
+          displayDiasAtraso = Math.max(0, diffDays - holidayCount);
+          displayMulta = displayDiasAtraso * 10;
         }
       } else {
         // Si la fecha de vencimiento no ha pasado aún, no hay multa ni días de atraso
@@ -1194,6 +1330,12 @@ function PrestamosContent(): JSX.Element | null {
             <Badge variant="destructive" className="bg-rose-500">
               Multa estimada: ${displayMulta} ({displayDiasAtraso} días hábiles de atraso)
             </Badge>
+            {holidayCount > 0 && (
+              <div className="text-xs text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1">
+                <CheckCircle2 className="h-3 w-3" />
+                {holidayCount} {holidayCount === 1 ? 'día feriado descontado' : 'días feriados descontados'}
+              </div>
+            )}
           </div>
         )}
         {loan.status === "devuelto" && loan.multa && loan.multa > 0 && (
@@ -1201,6 +1343,12 @@ function PrestamosContent(): JSX.Element | null {
             <Badge variant="destructive" className="bg-rose-500">
               Multa aplicada: ${loan.multa} ({loan.dias_atraso} días hábiles de atraso)
             </Badge>
+            {holidayCount > 0 && (
+              <div className="text-xs text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1">
+                <CheckCircle2 className="h-3 w-3" />
+                {holidayCount} {holidayCount === 1 ? 'día feriado descontado' : 'días feriados descontados'}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1277,22 +1425,32 @@ function PrestamosContent(): JSX.Element | null {
           description: "No hay préstamos atrasados para actualizar multas",
         });
         setIsUpdatingFines(false);
-        return;
+        return 0;
       }
       
       let updatedCount = 0;
+      let totalHolidaysApplied = 0;
       const updatedLoans = [...loans];
       
       for (const loan of overdueLoans) {
         try {
           // Usar los días feriados específicos de este préstamo
           const loanHolidayDays = holidayDaysByLoan[loan.id] || 0;
+          totalHolidaysApplied += loanHolidayDays;
+          
+          // Verificar la multa original para saber si hay cambios
+          const originalFine = loan.multa || 0;
+          const originalDaysLate = loan.dias_atraso || 0;
+          
           // Llamar al backend para sincronizar las multas
           const { multa, dias_atraso } = await loanService.syncFineWithBackend(
             loan.id, 
             loan.documentId,
             loanHolidayDays
           );
+          
+          // Verificar si hubo cambios
+          const hasChanged = multa !== originalFine || dias_atraso !== originalDaysLate;
           
           // Actualizar el préstamo en el array local
           const loanIndex = updatedLoans.findIndex(l => l.id === loan.id);
@@ -1302,7 +1460,11 @@ function PrestamosContent(): JSX.Element | null {
               multa,
               dias_atraso
             };
+            
+            // Solo incrementar el contador si hubo cambios reales
+            if (hasChanged) {
           updatedCount++;
+            }
           }
         } catch (error) {
           console.error(`Error al actualizar multa para préstamo ${loan.id}:`, error);
@@ -1310,17 +1472,25 @@ function PrestamosContent(): JSX.Element | null {
       }
       
       setLoans(updatedLoans);
+      
+      // Solo mostrar notificación si hubo cambios reales
+      if (updatedCount > 0) {
       toast({
-        description: `Multas actualizadas para ${updatedCount} préstamos`,
+          description: `Multas actualizadas para ${updatedCount} préstamos${totalHolidaysApplied > 0 ? ` (${totalHolidaysApplied} días feriados descontados)` : ''}`,
       });
+      }
+      
+      return updatedCount;
     } catch (error) {
       console.error("Error al actualizar multas:", error);
       toast({
         variant: "destructive",
         description: "Error al actualizar multas",
       });
-    }
+      return 0;
+    } finally {
       setIsUpdatingFines(false);
+    }
   };
 
   // Función para recargar los libros con inventario actualizado
@@ -1340,20 +1510,374 @@ function PrestamosContent(): JSX.Element | null {
     }
   };
 
-  if (loading) {
+  // Función para agregar un día feriado con enfoque optimista
+  const addHoliday = async (date: Date) => {
+    if (!date) return;
+
+    try {
+      // Normalizar fecha para identificación
+      const dateString = date.toISOString().split('T')[0];
+      
+      // Marcar esta fecha específica como en proceso de carga
+      setLoadingDates(prev => ({...prev, [dateString]: true}));
+      
+      // Actualización optimista (mostrar como feriado antes de confirmación)
+      const tempHoliday = {
+        id: `temp-${Date.now()}`,
+        date: date.toISOString(),
+        temporary: true
+      };
+      
+      // Añadir a la lista local inmediatamente
+      setHolidays(prev => [...prev, tempHoliday as Holiday]);
+      
+      // Asegurar que la fecha está en formato ISO completo
+      const formattedDate = new Date(date);
+      // Establecer la hora a las 7:00 am (para mantener consistencia con los datos de ejemplo)
+      formattedDate.setHours(7, 0, 0, 0);
+      
+      console.log(`Intentando agregar feriado en fecha ISO: ${formattedDate.toISOString()}`);
+      
+      const newHoliday = await holidayService.addHoliday(formattedDate);
+      if (newHoliday) {
+        console.log("Día feriado agregado:", newHoliday);
+        
+        // Verificar que el holiday tiene un documentId válido
+        if (!newHoliday.documentId || newHoliday.documentId === String(newHoliday.id)) {
+          console.warn("El feriado se creó sin un documentId válido. Usando solo ID para operaciones futuras.");
+        }
+        
+        // Actualizar el estado reemplazando el temporal por el real
+        setHolidays(prev => prev.map(h => 
+          (h.temporary && new Date(h.date).toISOString().split('T')[0] === dateString) 
+            ? newHoliday 
+            : h
+        ));
+        
+        // No mostrar toast inmediatamente, esperar a ver si hay cambios en préstamos
+        
+        // Cargar en segundo plano sin mostrar estados de carga
+        setTimeout(() => {
+          loadHolidays(false);
+          
+          // Recalcular días feriados para los préstamos
+          setTimeout(() => {
+            // Recalcular los días feriados para cada préstamo
+            const holidayDays: Record<string | number, number> = {};
+            
+            loans.forEach(loan => {
+              if (loan.status === "atrasado" || (loan.status === "devuelto" && loan.multa && loan.multa > 0)) {
+                const feriados = calcularDiasFeriados(loan);
+                holidayDays[loan.id] = feriados;
+              }
+            });
+            
+            setHolidayDaysByLoan(holidayDays);
+            
+            // Actualizar inmediatamente las multas
+            calculateAllFines().then((updatedCount) => {
+              // Solo mostrar notificación si hay cambios en las multas
+              if (updatedCount === 0) {
+                toast({
+                  description: `Día feriado agregado: ${format(date, 'dd/MM/yyyy')}`,
+                });
+              }
+            });
+          }, 300);
+        }, 500);
+      } else {
+        // Si falla, eliminar el temporal
+        setHolidays(prev => prev.filter(h => !h.temporary));
+        toast({
+          title: "Error",
+          description: "No se pudo agregar el día feriado",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error al agregar día feriado:', error);
+      
+      // Eliminar el temporal en caso de error
+      setHolidays(prev => prev.filter(h => !h.temporary));
+      
+      toast({
+        title: "Error",
+        description: "No se pudo agregar el día feriado",
+        variant: "destructive",
+      });
+    } finally {
+      // Limpiar estado de carga para esta fecha
+      const dateString = date.toISOString().split('T')[0];
+      setLoadingDates(prev => {
+        const updated = {...prev};
+        delete updated[dateString];
+        return updated;
+      });
+    }
+  };
+
+  // Función para eliminar un día feriado con enfoque optimista
+  const deleteHoliday = async (holiday: Holiday) => {
+    if (!holiday) return false;
+    
+    try {
+      // Normalizar fecha para identificación
+      const dateString = new Date(holiday.date).toISOString().split('T')[0];
+      
+      // Marcar esta fecha específica como en proceso de carga
+      setLoadingDates(prev => ({...prev, [dateString]: true}));
+      
+      // Actualización optimista (quitar de la lista local inmediatamente)
+      const originalHolidays = [...holidays];
+      setHolidays(prev => prev.filter(h => h.id !== holiday.id));
+      
+      console.log('Intentando eliminar feriado:', holiday);
+      
+      // Verificar que tenemos la información necesaria para la eliminación
+      if (!holiday.id && !holiday.documentId) {
+        console.error('No se puede eliminar el feriado: faltan tanto ID como documentId');
+        // Restaurar estado original
+        setHolidays(originalHolidays);
+        return false;
+      }
+      
+      // Verificar que documentId sea válido (no sea igual al id numérico)
+      const hasValidDocumentId = holiday.documentId && 
+                               typeof holiday.documentId === 'string' && 
+                               holiday.documentId.length > 10 &&
+                               holiday.documentId !== String(holiday.id);
+      
+      if (hasValidDocumentId) {
+        console.log(`Eliminando feriado usando documentId: ${holiday.documentId}`);
+        // Usar directamente el holidayService con documentId primero
+        const success = await holidayService.deleteHoliday(holiday.id, holiday.documentId);
+        
+        if (success) {
+          // No mostrar toast inmediatamente, esperar a ver si hay cambios en préstamos
+          
+          // Cargar en segundo plano sin mostrar estados de carga
+          setTimeout(() => {
+            loadHolidays(false);
+            
+            // Recalcular días feriados para los préstamos
+            setTimeout(() => {
+              // Recalcular los días feriados para cada préstamo
+              const holidayDays: Record<string | number, number> = {};
+              
+              loans.forEach(loan => {
+                if (loan.status === "atrasado" || (loan.status === "devuelto" && loan.multa && loan.multa > 0)) {
+                  const feriados = calcularDiasFeriados(loan);
+                  holidayDays[loan.id] = feriados;
+                }
+              });
+              
+              setHolidayDaysByLoan(holidayDays);
+              
+              // Actualizar inmediatamente las multas
+              calculateAllFines().then((updatedCount) => {
+                // Solo mostrar notificación si no hay cambios en las multas
+                if (updatedCount === 0) {
+                  toast({
+                    description: `Día feriado eliminado: ${format(parseISO(holiday.date), 'dd/MM/yyyy')}`,
+                  });
+                }
+              });
+            }, 300);
+          }, 500);
+          
+          return true;
+        }
+      } else if (holiday.id) {
+        // Si no tenemos documentId válido, intentar solo con ID
+        console.log(`Eliminando feriado usando solo ID: ${holiday.id} (sin documentId válido)`);
+        const success = await holidayService.deleteHoliday(holiday.id, undefined);
+        
+        if (success) {
+          // No mostrar toast inmediatamente, esperar a ver si hay cambios en préstamos
+          
+          // Cargar en segundo plano sin mostrar estados de carga
+          setTimeout(() => {
+            loadHolidays(false);
+            
+            // Recalcular días feriados para los préstamos
+            setTimeout(() => {
+              // Recalcular los días feriados para cada préstamo
+              const holidayDays: Record<string | number, number> = {};
+              
+              loans.forEach(loan => {
+                if (loan.status === "atrasado" || (loan.status === "devuelto" && loan.multa && loan.multa > 0)) {
+                  const feriados = calcularDiasFeriados(loan);
+                  holidayDays[loan.id] = feriados;
+                }
+              });
+              
+              setHolidayDaysByLoan(holidayDays);
+              
+              // Actualizar inmediatamente las multas
+              calculateAllFines().then((updatedCount) => {
+                // Solo mostrar notificación si no hay cambios en las multas
+                if (updatedCount === 0) {
+                  toast({
+                    description: `Día feriado eliminado: ${format(parseISO(holiday.date), 'dd/MM/yyyy')}`,
+                  });
+                }
+              });
+            }, 300);
+          }, 500);
+          
+          return true;
+        }
+      }
+      
+      // Si llegamos aquí, falló la eliminación
+      console.error('No se pudo eliminar el feriado a través de la API');
+      
+      // Verificar mediante carga si realmente se eliminó
+      await loadHolidays(false);
+      
+      // Comprobar si el feriado sigue existiendo
+      const stillExists = holidays.some(h => {
+        try {
+          return h.id === holiday.id || h.documentId === holiday.documentId;
+        } catch (e) {
+          return false;
+        }
+      });
+      
+      if (!stillExists) {
+        console.log(`Verificación confirmó que el feriado ya no existe`);
+        return true;
+      }
+      
+      // Si aún existe, restaurar el estado original
+      setHolidays(originalHolidays);
+      
+      // Mostrar error
+      toast({
+        title: "Error",
+        description: "No se pudo eliminar el día feriado",
+        variant: "destructive",
+      });
+      
+      return false;
+    } catch (error) {
+      console.error('Error al eliminar día feriado:', error);
+      
+      // Restaurar el estado original en caso de error
+      setHolidays(prev => [...holidays]);
+      
+      toast({
+        title: "Error",
+        description: "No se pudo eliminar el día feriado",
+        variant: "destructive",
+      });
+      return false;
+    } finally {
+      // Limpiar estado de carga para esta fecha
+      const dateString = new Date(holiday.date).toISOString().split('T')[0];
+      setLoadingDates(prev => {
+        const updated = {...prev};
+        delete updated[dateString];
+        return updated;
+      });
+    }
+  };
+
+  // Función para manejar el clic en una fecha del calendario
+  const handleCalendarSelect = (date: Date | undefined) => {
+    if (!date) return;
+    
+    // Normalizar la fecha a formato YYYY-MM-DD para comparación consistente
+    const normalizedDate = new Date(date);
+    normalizedDate.setHours(0, 0, 0, 0); 
+    const selectedDateString = normalizedDate.toISOString().split('T')[0];
+    
+    // Si ya está cargando esta fecha, no hacer nada
+    if (loadingDates[selectedDateString]) {
+      console.log(`Fecha ${selectedDateString} ya está en proceso, ignorando clic`);
+      return;
+    }
+    
+    console.log(`Usuario hizo clic en fecha: ${selectedDateString}`);
+    
+    // Volcado de información de debug para los feriados actuales
+    console.log("Todos los días feriados actuales:", holidays.map(h => ({
+      id: h.id,
+      documentId: h.documentId,
+      date: h.date,
+      dateFormatted: new Date(h.date).toISOString().split('T')[0]
+    })));
+    
+    // Comprobar si la fecha ya existe como feriado (más robusto)
+    const existingHoliday = holidays.find(h => {
+      try {
+        // Normalizar ambas fechas a formato YYYY-MM-DD para comparación
+        const holidayDate = new Date(h.date);
+        const holidayDateString = holidayDate.toISOString().split('T')[0];
+        
+        console.log(`Comparando: ${holidayDateString} con ${selectedDateString}`);
+        return holidayDateString === selectedDateString;
+      } catch (error) {
+        console.error('Error al procesar fecha de holiday:', h);
+        return false;
+      }
+    });
+    
+    console.log("¿Se encontró feriado existente?", existingHoliday ? "SÍ" : "NO");
+    
+    if (existingHoliday) {
+      // Si ya existe, eliminarlo
+      console.log(`Fecha ${selectedDateString} ya existe como feriado, intentando eliminar:`, existingHoliday);
+      
+      // Verificar que el holiday tiene toda la información necesaria
+      if (!existingHoliday.documentId) {
+        console.warn("El feriado no tiene documentId, se intentará eliminar solo con ID");
+      }
+      
+      // Eliminar el feriado (la función deleteHoliday ya tiene enfoque optimista)
+      deleteHoliday(existingHoliday);
+      
+    } else {
+      // Si no existe, agregarlo
+      console.log(`Fecha ${selectedDateString} no existe como feriado, intentando agregar`);
+      addHoliday(date);
+    }
+  };
+
+  // Función para renderizar el día en el calendario (para mostrar los feriados con estilo especial)
+  const renderCalendarDay = (props: DayContentProps) => {
+    const { date, ...dayProps } = props;
+    if (!date) return <DayContent {...props} />;
+    
+    const dateString = date.toISOString().split('T')[0];
+    const isLoading = loadingDates[dateString];
+    const isHoliday = holidayService.isHoliday(date, holidays);
+
     return (
-      <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h2 className="text-3xl font-bold tracking-tight">Préstamos</h2>
-            <p className="text-muted-foreground">
-              Cargando préstamos...
-            </p>
+      <div className={cn(
+        "relative flex h-10 w-10 items-center justify-center rounded-full p-0",
+        isHoliday && "bg-rose-100 dark:bg-rose-900/50",
+        isHoliday && "after:absolute after:left-1/2 after:top-1/2 after:h-px after:w-6 after:-translate-x-1/2 after:-translate-y-1/2 after:rotate-45 after:bg-rose-600 after:content-['']",
+        isHoliday && "before:absolute before:left-1/2 before:top-1/2 before:h-6 before:w-px before:-translate-x-1/2 before:-translate-y-1/2 before:rotate-45 before:bg-rose-600 before:content-['']"
+      )}>
+        <time
+          dateTime={format(date, 'yyyy-MM-dd')}
+          className={cn(
+            "flex h-10 w-10 items-center justify-center rounded-full",
+            isHoliday && "text-rose-700 dark:text-rose-400 font-medium",
+            isLoading && "opacity-50"
+          )}
+        >
+          {format(date, "d")}
+          {isLoading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-background/50 rounded-full">
+              <div className="h-3 w-3 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
           </div>
-        </div>
+          )}
+        </time>
       </div>
     );
-  }
+  };
 
   return (
     <div className="space-y-6">
@@ -1386,6 +1910,16 @@ function PrestamosContent(): JSX.Element | null {
               {isUpdatingFines ? "Actualizando..." : "Actualizar multas"}
             </Button>
           )}
+          
+          {/* Botón para gestionar días feriados */}
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => setShowHolidayModal(true)}
+          >
+            <CalendarX className="mr-2 h-4 w-4" />
+            Días feriados
+          </Button>
           
           <Button 
             variant="default" 
@@ -1641,24 +2175,24 @@ function PrestamosContent(): JSX.Element | null {
                       </TableCell>
                           <TableCell className="px-4 py-2">
                             <div className="flex justify-center">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
                                   <Button 
                                     variant="ghost" 
                                     size="icon" 
                                     className="h-8 w-8"
                                   >
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-56">
-                                  <DropdownMenuLabel>Acciones</DropdownMenuLabel>
-                                  <DropdownMenuSeparator />
-                                  {renderActionMenu(loan)}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                          </TableCell>
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-56">
+                              <DropdownMenuLabel>Acciones</DropdownMenuLabel>
+                              <DropdownMenuSeparator />
+                          {renderActionMenu(loan)}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))}
               </TableBody>
@@ -1685,7 +2219,37 @@ function PrestamosContent(): JSX.Element | null {
 
       {selectedLoan && (
         <>
-      <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
+      <Dialog open={showDetailsDialog} onOpenChange={(open) => {
+        // Cuando se abre el modal, calcular automáticamente los días feriados
+        if (open && selectedLoan) {
+          const holidayCount = calcularDiasFeriados(selectedLoan);
+          
+          // Actualizar estado solo si es diferente al valor actual
+          if (holidayDaysByLoan[selectedLoan.id] !== holidayCount) {
+            // Actualizar los días feriados para este préstamo
+            setHolidayDaysByLoan(prev => ({
+              ...prev,
+              [selectedLoan.id]: holidayCount
+            }));
+            
+            // Recalcular multa
+            const dueDate = new Date(selectedLoan.returnDate);
+            const today = new Date();
+            const daysLate = loanService.calculateBusinessDays(dueDate, today);
+            const adjustedDaysLate = Math.max(0, daysLate - holidayCount);
+            const fine = adjustedDaysLate * 10;
+            
+            // Actualizar el préstamo seleccionado con la nueva multa
+            setSelectedLoan({
+              ...selectedLoan,
+              multa: fine,
+              dias_atraso: adjustedDaysLate
+            });
+          }
+        }
+        
+        setShowDetailsDialog(open);
+      }}>
       <DialogContent className="sm:max-w-md">
           <DialogHeader>
           <DialogTitle className="text-xl flex items-center gap-2">
@@ -1767,97 +2331,11 @@ function PrestamosContent(): JSX.Element | null {
           {/* Información de multa */}
                 {(selectedLoan.status === "atrasado" || (selectedLoan.status === "devuelto" && selectedLoan.multa && selectedLoan.multa > 0)) && (
             <div className="border rounded-md p-3 bg-rose-50 dark:bg-rose-900/10 mt-3">
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center mb-2">
                 <h4 className="text-sm font-medium text-rose-600 dark:text-rose-400">
                       Información de multa
                     </h4>
-                    {selectedLoan.status === "atrasado" && (
-                        <Button 
-                          size="sm" 
-                          variant="outline" 
-                    className="h-7 text-xs"
-                          onClick={async () => {
-                            try {
-                        const loanHolidayDays = holidayDaysByLoan[selectedLoan.id] || 0;
-                        const fineDetails = await loanService.syncFineWithBackend(
-                          selectedLoan.id, 
-                          selectedLoan.documentId, 
-                          loanHolidayDays
-                        );
-                              
-                              setSelectedLoan({
-                                ...selectedLoan,
-                                multa: fineDetails.multa,
-                                dias_atraso: fineDetails.dias_atraso
-                              });
-                              
-                              setLoans(currentLoans => 
-                                currentLoans.map(l => 
-                                  l.id === selectedLoan.id 
-                              ? { ...l, multa: fineDetails.multa, dias_atraso: fineDetails.dias_atraso } 
-                                    : l
-                                )
-                              );
-                              
-                              toast({
-                          description: `Multa actualizada: $${fineDetails.multa}`,
-                              });
-                            } catch (error) {
-                              console.error("Error al actualizar multa:", error);
-                              toast({
-                                variant: "destructive",
-                          description: "No se pudo actualizar la multa",
-                              });
-                            }
-                          }}
-                        >
-                          <Calculator className="h-3 w-3 mr-1" />
-                    Actualizar
-                        </Button>
-                )}
               </div>
-              
-              {/* Días feriados solo para multas activas */}
-              {selectedLoan.status === "atrasado" && (
-                <div className="flex items-center gap-2 mb-2">
-                  <Input
-                    type="number"
-                    min="0"
-                    className="h-7 w-16 text-xs"
-                    placeholder="0"
-                    defaultValue={holidayDaysByLoan[selectedLoan.id] || 0}
-                    onChange={async (e) => {
-                      const holidayDays = parseInt(e.target.value) || 0;
-                      if (selectedLoan && selectedLoan.id) {
-                        setHolidayDaysByLoan(prev => ({
-                          ...prev,
-                          [selectedLoan.id]: Math.max(0, holidayDays)
-                        }));
-                        
-                        try {
-                          const today = new Date();
-                          const dueDate = new Date(selectedLoan.returnDate);
-                          
-                          if (dueDate < today) {
-                            const daysLate = loanService.calculateBusinessDays(dueDate, today);
-                            const adjustedDaysLate = Math.max(0, daysLate - holidayDays);
-                            const fine = adjustedDaysLate * 10;
-
-                            setSelectedLoan({
-                              ...selectedLoan,
-                              multa: fine,
-                              dias_atraso: adjustedDaysLate
-                            });
-                          }
-                        } catch (error) {
-                          console.error("Error al recalcular multa:", error);
-                        }
-                      }
-                    }}
-                  />
-                  <span className="text-xs text-muted-foreground">Días feriados a descontar</span>
-                      </div>
-                    )}
               
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>
@@ -1869,6 +2347,12 @@ function PrestamosContent(): JSX.Element | null {
                   <p className="text-sm">${selectedLoan.multa || 0} MXN</p>
                 </div>
               </div>
+              {holidayDaysByLoan[selectedLoan.id] > 0 && (
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3" />
+                  {holidayDaysByLoan[selectedLoan.id]} {holidayDaysByLoan[selectedLoan.id] === 1 ? 'día feriado descontado' : 'días feriados descontados'} del cálculo
+                </p>
+              )}
               <p className="text-xs text-muted-foreground mt-2">
                 {selectedLoan.status === "atrasado" 
                   ? "La multa se incrementará hasta la devolución del libro" 
@@ -2591,6 +3075,154 @@ function PrestamosContent(): JSX.Element | null {
             >
               <RotateCw className="mr-2 h-4 w-4" />
               Confirmar Renovación
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Gestión de días feriados */}
+      <Dialog open={showHolidayModal} onOpenChange={(open) => {
+        // Si se está cerrando el modal (estaba abierto y ahora se cierra)
+        if (!open && showHolidayModal && selectedLoan) {
+          // Calcular los días feriados aplicables al préstamo seleccionado
+          const holidayCount = calcularDiasFeriados(selectedLoan);
+          
+          // Verificar si hay cambios
+          const originalHolidayCount = holidayDaysByLoan[selectedLoan.id] || 0;
+          const hasHolidayChanged = holidayCount !== originalHolidayCount;
+          
+          // Actualizar el estado local solo si hay cambios
+          if (hasHolidayChanged) {
+            setHolidayDaysByLoan(prev => ({
+              ...prev,
+              [selectedLoan.id]: holidayCount
+            }));
+            
+            // Recalcular la multa
+            const dueDate = new Date(selectedLoan.returnDate);
+            const today = new Date();
+            const daysLate = loanService.calculateBusinessDays(dueDate, today);
+            const adjustedDaysLate = Math.max(0, daysLate - holidayCount);
+            const fine = adjustedDaysLate * 10;
+            
+            // Verificar si la multa ha cambiado
+            const originalFine = selectedLoan.multa || 0;
+            const originalDaysLate = selectedLoan.dias_atraso || 0;
+            const hasFineChanged = fine !== originalFine || adjustedDaysLate !== originalDaysLate;
+            
+            if (hasFineChanged) {
+              // Actualizar el préstamo seleccionado
+              setSelectedLoan({
+                ...selectedLoan,
+                multa: fine,
+                dias_atraso: adjustedDaysLate
+              });
+              
+              // Actualizar también la lista principal de préstamos
+              setLoans(prevLoans => 
+                prevLoans.map(loan => 
+                  loan.id === selectedLoan.id 
+                    ? { ...loan, multa: fine, dias_atraso: adjustedDaysLate }
+                    : loan
+                )
+              );
+              
+              // Sincronizar con el backend
+              loanService.syncFineWithBackend(
+                selectedLoan.id,
+                selectedLoan.documentId,
+                holidayCount
+              ).then(fineDetails => {
+                // Solo notificar al usuario si hubo cambios
+                toast({
+                  description: `Se han aplicado ${holidayCount} días feriados al cálculo de multa.`,
+                });
+                
+                // Actualizar todas las multas, pero no mostrar notificación adicional
+                calculateAllFines().then(() => {});
+              }).catch(error => {
+                console.error("Error al sincronizar multa con el backend:", error);
+              });
+            }
+          }
+        } else if (!open && showHolidayModal) {
+          // Si se cierra el modal pero no hay préstamo seleccionado, actualizar todas las multas
+          calculateAllFines().then(() => {});
+        }
+        
+        // Actualizar el estado del modal
+        setShowHolidayModal(open);
+      }}>
+        <DialogContent className="sm:max-w-[550px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarX className="h-5 w-5 text-rose-500" />
+              Días feriados y suspensiones
+            </DialogTitle>
+            <DialogDescription>
+              Selecciona los días que son feriados o suspensiones. Estos se descontarán automáticamente del cálculo de multas.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            {loadingHolidays ? (
+              <div className="flex justify-center py-6">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            ) : (
+              <>
+                <div className="mb-4 rounded-md bg-muted/50 p-3 text-sm text-muted-foreground">
+                  <p className="flex items-center gap-1">
+                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+                    Haz clic en una fecha para marcarla o desmarcarla como feriado
+                  </p>
+                </div>
+                
+                <div className="flex justify-center w-full">
+                  <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={handleCalendarSelect}
+                    className="rounded-md border"
+                    components={{
+                      DayContent: renderCalendarDay
+                    }}
+                    disabled={(date) => {
+                      // Deshabilitar sábados (día 6) y domingos (día 0)
+                      const dayOfWeek = date.getDay();
+                      return isHolidayUpdating || dayOfWeek === 0 || dayOfWeek === 6;
+                    }}
+                    locale={es}
+                    weekStartsOn={0} // 0 = domingo, 1 = lunes (por defecto)
+                    formatters={{
+                      formatCaption: (date, options) => {
+                        const month = format(date, 'LLLL', { locale: es });
+                        const capitalizedMonth = month.charAt(0).toUpperCase() + month.slice(1);
+                        return `${capitalizedMonth} ${format(date, 'yyyy')}`;
+                      }
+                    }}
+                  />
+                </div>
+                
+                <div className="mt-4">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                    <BadgeX className="h-4 w-4 text-rose-500" />
+                    <span>Días feriados marcados: {holidays.length}</span>
+                  </div>
+                  
+                  {holidays.length > 0 && (
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      <p>Las multas se calcularán excluyendo automáticamente estos días.</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button onClick={() => setShowHolidayModal(false)}>
+              Cerrar
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -28,6 +28,13 @@ const fetchWithRetry = async (url: string, options: RequestInit, attempts = API_
       throw new Error(`Error HTTP: ${response.status}`);
     }
 
+    // Verificar si es una respuesta 204 (No Content) antes de intentar procesar JSON
+    if (response.status === 204) {
+      console.log("Operación exitosa (204 No Content)");
+      return { success: true, message: "Operación completada correctamente" };
+    }
+
+    // Solo procesar como JSON si la respuesta tiene contenido
     const data = await response.json();
     return data;
   } catch (error: any) {

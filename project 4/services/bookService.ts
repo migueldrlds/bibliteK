@@ -26,8 +26,8 @@ export interface Book {
   };
   // Añadir soporte para múltiples inventarios
   inventories?: {
-    id: number;
-    documentId: string;
+    id?: number;
+    documentId?: string;
     Campus: string;
     Cantidad: number;
   }[];
@@ -326,77 +326,210 @@ export const bookService = {
   },
 
   // Crear un nuevo libro
-  createBook: async (bookData: Partial<Book>): Promise<any> => {
+  createBook: async (bookData: any): Promise<any> => {
+    console.log("=== INICIO DE CREACIÓN DE LIBRO ===");
+    console.log("Datos recibidos para crear libro:", bookData);
+    
     try {
-      console.log('=== INICIO DE CREACIÓN DE LIBRO ===');
-      console.log('Datos recibidos para crear libro:', bookData);
+      // Extraer inventarios si existen
+      const { inventories, ...bookDataWithoutInventories } = bookData;
       
-      // Asegurarse de que id_libro siempre sea un string, nunca null
-      const id_libro = bookData.id_libro || `AUTO-${Date.now()}`;
-      
-      // Preparar los datos exactamente como los espera Strapi
-      const serverData = {
-        id_libro: id_libro,
-        titulo: bookData.titulo || "",
-        autor: bookData.autor || "",
-        clasificacion: bookData.clasificacion || "",
-        campus: bookData.campus || null
+      // Crear un objeto con el formato correcto para Strapi
+      const requestData = {
+        data: {
+          ...bookDataWithoutInventories
+          // Ya no incluimos directamente inventory ni inventories
+          // Strapi creará el libro primero, luego crearemos los inventarios por separado
+        }
       };
       
-      console.log('Datos formateados para crear libro:', serverData);
+      console.log("Datos formateados para crear libro:", JSON.stringify(requestData, null, 2));
       
-      const response = await fetchAPI('/api/books', {
+      // URL de la API
+      const apiUrl = '/api/books';
+      console.log("Intentando conectar a:", `http://localhost:1337${apiUrl}`);
+      
+      // 1. Crear el libro primero
+      const bookResponse = await fetchAPI(apiUrl, {
         method: 'POST',
-        body: JSON.stringify({ data: serverData }),
+        body: JSON.stringify(requestData),
       });
       
-      console.log('Respuesta al crear libro:', response);
-      console.log('=== FIN DE CREACIÓN DE LIBRO ===');
+      console.log("Libro creado correctamente:", bookResponse);
       
-      return response;
+      // 2. Si hay inventarios y la creación del libro fue exitosa, crear los inventarios
+      if (inventories && inventories.length > 0 && bookResponse && bookResponse.data) {
+        console.log("Creando inventarios para el nuevo libro...");
+        
+        const bookId = bookResponse.data.id;
+        const bookDocumentId = bookResponse.data.attributes?.documentId || bookId.toString();
+        
+        console.log(`ID del libro creado: ${bookId}, DocumentID: ${bookDocumentId}`);
+        
+        // Crear cada inventario por separado
+        const inventoryPromises = inventories.map(async (inv: { Campus: string; Cantidad: number | string }) => {
+          if (!inv.Campus || parseInt(inv.Cantidad.toString()) <= 0) {
+            return null; // Omitir inventarios sin campus o con cantidad cero/negativa
+          }
+          
+          try {
+            const invData = {
+              data: {
+                book: bookDocumentId,
+                Campus: inv.Campus,
+                Cantidad: parseInt(inv.Cantidad.toString())
+              }
+            };
+            
+            console.log(`Creando inventario para campus ${inv.Campus}:`, invData);
+            
+            const inventoryResponse = await fetchAPI('/api/inventories', {
+              method: 'POST',
+              body: JSON.stringify(invData),
+            });
+            
+            console.log(`Inventario creado para campus ${inv.Campus}:`, inventoryResponse);
+            return inventoryResponse;
+          } catch (invError) {
+            console.error(`Error al crear inventario para campus ${inv.Campus}:`, invError);
+            return null;
+          }
+        });
+        
+        // Esperar a que se completen todas las creaciones de inventario
+        const inventoryResults = await Promise.all(inventoryPromises);
+        console.log("Resultados de creación de inventarios:", inventoryResults.filter(Boolean).length);
+      }
+      
+      console.log("=== FIN DE CREACIÓN DE LIBRO (ÉXITO) ===");
+      return bookResponse;
     } catch (error) {
-      console.error('Error en createBook:', error);
-      console.log('=== FIN DE CREACIÓN DE LIBRO (CON ERROR) ===');
+      console.error("Error en createBook:", error);
+      console.log("=== FIN DE CREACIÓN DE LIBRO (CON ERROR) ===");
       throw error;
     }
   },
 
-  // Actualizar un libro existente
-  updateBook: async (id: number | string, bookData: Partial<Book>, documentId?: string): Promise<any> => {
+  /**
+   * Actualiza un libro existente
+   * @param id ID del libro a actualizar
+   * @param book Datos actualizados del libro
+   */
+  updateBook: async (id: string | number, book: any, documentId?: string): Promise<any> => {
+    console.log("=== INICIO DE ACTUALIZACIÓN DE LIBRO ===");
+    console.log("Actualizando libro con ID:", id);
+    console.log("Datos recibidos para actualizar:", book);
+    
     try {
-      console.log("=== INICIO DE ACTUALIZACIÓN DE LIBRO ===");
-      console.log(`Actualizando libro con ID: ${id}`);
-      console.log("Datos recibidos:", bookData);
+      // Extraer inventarios si existen
+      const { inventories, ...bookDataWithoutInventories } = book;
+      
+      // Crear un objeto con el formato correcto para Strapi
+      const requestData = {
+        data: {
+          ...bookDataWithoutInventories
+          // Ya no incluimos directamente inventory ni inventories
+          // Actualizaremos el libro primero, luego gestionaremos los inventarios
+        }
+      };
+      
+      console.log("Datos formateados para actualizar libro:", JSON.stringify(requestData, null, 2));
       
       // Verificar si tenemos documentId
       const idToUse = documentId || id;
       console.log(`ID a usar para actualización: ${idToUse} (${documentId ? 'documentId' : 'id numérico'})`);
       
-      // Preparar datos para Strapi en formato correcto
-      const formattedData: { data: Partial<Book> } = {
-        data: {}
-      };
+      // URL de la API
+      const apiUrl = `/api/books/${idToUse}`;
+      console.log("Intentando conectar a:", `http://localhost:1337${apiUrl}`);
       
-      // Extraer solo los campos que queremos actualizar
-      if (bookData.titulo !== undefined) formattedData.data.titulo = bookData.titulo;
-      if (bookData.autor !== undefined) formattedData.data.autor = bookData.autor;
-      if (bookData.clasificacion !== undefined) formattedData.data.clasificacion = bookData.clasificacion;
-      if (bookData.id_libro !== undefined) formattedData.data.id_libro = bookData.id_libro;
-      if (bookData.campus !== undefined) formattedData.data.campus = bookData.campus;
-      
-      console.log("Datos formateados para actualización:", formattedData);
-      
-      const response = await fetchAPI(`/api/books/${idToUse}`, {
+      // 1. Actualizar el libro primero
+      const bookResponse = await fetchAPI(apiUrl, {
         method: 'PUT',
-        body: JSON.stringify(formattedData),
+        body: JSON.stringify(requestData),
       });
       
-      console.log("Respuesta de actualización:", response);
-      console.log("=== FIN DE ACTUALIZACIÓN DE LIBRO ===");
+      console.log("Libro actualizado correctamente:", bookResponse);
       
-      return response;
+      // 2. Si hay inventarios y la actualización del libro fue exitosa, gestionar los inventarios
+      if (inventories && inventories.length > 0 && bookResponse && bookResponse.data) {
+        console.log("Gestionando inventarios para el libro actualizado...");
+        
+        const bookId = bookResponse.data.id;
+        const bookDocumentId = bookResponse.data.attributes?.documentId || bookId.toString();
+        
+        console.log(`ID del libro actualizado: ${bookId}, DocumentID: ${bookDocumentId}`);
+        
+        // Gestionaremos cada inventario por separado
+        const inventoryPromises = inventories.map(async (inv: { Campus: string; Cantidad: number | string }) => {
+          if (!inv.Campus || parseInt(inv.Cantidad.toString()) <= 0) {
+            return null; // Omitir inventarios sin campus o con cantidad cero/negativa
+          }
+          
+          try {
+            // Primero buscar si hay un inventario existente para este campus
+            const searchUrl = `/api/inventories?filters[book][documentId]=${bookDocumentId}&filters[Campus]=${encodeURIComponent(inv.Campus)}`;
+            console.log(`Buscando inventario existente para campus ${inv.Campus}:`, searchUrl);
+            
+            const searchResponse = await fetchAPI(searchUrl);
+            const existingInventories = searchResponse?.data || [];
+            
+            if (existingInventories.length > 0) {
+              // Si existe, actualizar el primero que encuentre
+              const existingInv = existingInventories[0];
+              const existingId = existingInv.id;
+              const existingDocId = existingInv.attributes?.documentId || existingId.toString();
+              
+              console.log(`Actualizando inventario existente para campus ${inv.Campus}, ID: ${existingId}`);
+              
+              const updateData = {
+                data: {
+                  Cantidad: parseInt(inv.Cantidad.toString())
+                }
+              };
+              
+              const updateResponse = await fetchAPI(`/api/inventories/${existingDocId}`, {
+                method: 'PUT',
+                body: JSON.stringify(updateData),
+              });
+              
+              console.log(`Inventario actualizado para campus ${inv.Campus}:`, updateResponse);
+              return updateResponse;
+            } else {
+              // Si no existe, crear uno nuevo
+              console.log(`Creando nuevo inventario para campus ${inv.Campus}`);
+              
+              const createData = {
+                data: {
+                  book: bookDocumentId,
+                  Campus: inv.Campus,
+                  Cantidad: parseInt(inv.Cantidad.toString())
+                }
+              };
+              
+              const createResponse = await fetchAPI('/api/inventories', {
+                method: 'POST',
+                body: JSON.stringify(createData),
+              });
+              
+              console.log(`Nuevo inventario creado para campus ${inv.Campus}:`, createResponse);
+              return createResponse;
+            }
+          } catch (invError) {
+            console.error(`Error al gestionar inventario para campus ${inv.Campus}:`, invError);
+            return null;
+          }
+        });
+        
+        // Esperar a que se completen todas las operaciones de inventario
+        const inventoryResults = await Promise.all(inventoryPromises);
+        console.log("Resultados de gestión de inventarios:", inventoryResults.filter(Boolean).length);
+      }
+      
+      console.log("=== FIN DE ACTUALIZACIÓN DE LIBRO (ÉXITO) ===");
+      return bookResponse;
     } catch (error) {
-      console.error(`Error al actualizar libro ID ${id}:`, error);
+      console.error("Error en updateBook:", error);
       console.log("=== FIN DE ACTUALIZACIÓN DE LIBRO (CON ERROR) ===");
       throw error;
     }
@@ -406,9 +539,15 @@ export const bookService = {
   deleteBook: async (id: number | string): Promise<any> => {
     try {
       console.log(`Eliminando libro con ID: ${id}`);
-      const response = await fetchAPI(`/api/books/${id}`, {
+      
+      // URL de la API corregida con prefijo /api/
+      const apiUrl = `/api/books/${id}`;
+      console.log("Intentando conectar a:", `http://localhost:1337${apiUrl}`);
+      
+      const response = await fetchAPI(apiUrl, {
         method: 'DELETE',
       });
+      
       console.log(`Libro ID ${id} eliminado con éxito:`, response);
       return response;
     } catch (error) {
@@ -605,7 +744,11 @@ export const bookService = {
     }
     
     try {
-      const createResponse = await fetchAPI('/api/inventories', {
+      // URL de la API corregida con prefijo /api/
+      const apiUrl = `/api/inventories`;
+      console.log("Intentando crear inventario en:", `http://localhost:1337${apiUrl}`);
+      
+      const createResponse = await fetchAPI(apiUrl, {
         method: 'POST',
         body: JSON.stringify({
           data: {

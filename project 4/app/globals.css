@@ -56,6 +56,7 @@
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
   }
+
   /* Tema TEC con azul #1b396a para encabezado y fondo blanco para contenido */
   .tec {
     /* Fondo blanco para el contenido principal */
@@ -120,26 +121,114 @@
   color: white;
 }
 
-/* Asegurar que los botones y enlaces en el header mantengan el color blanco */
-.tec header a,
-.tec .header a,
-.tec [role="banner"] a,
-.tec .navbar a,
-.tec nav[class*="main"] a,
-.tec header button,
-.tec .header button,
-.tec [role="banner"] button,
-.tec .navbar button,
-.tec nav[class*="main"] button {
-  color: white;
+/* Mantener el fondo blanco para botones seleccionados y texto/icono azul TEC */
+.tec header .bg-white,
+.tec .header .bg-white,
+.tec [role="banner"] .bg-white,
+.tec .navbar .bg-white,
+.tec nav .bg-white {
+  background-color: white !important;
+  color: #1b396a !important;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 999px;
+  font-weight: 500;
+  padding: 0.5rem 1rem;
+  z-index: 1;
 }
 
-.tec header .logo,
-.tec .header .logo,
-.tec [role="banner"] .logo,
-.tec .navbar .logo,
-.tec nav[class*="main"] .logo {
-  filter: brightness(0) invert(1); /* Hacer que los logotipos sean blancos */
+.tec header .bg-white svg,
+.tec .header .bg-white svg,
+.tec [role="banner"] .bg-white svg,
+.tec .navbar .bg-white svg,
+.tec nav .bg-white svg {
+  color: #1b396a !important;
+  fill: #1b396a !important;
+}
+
+/* NUEVO ESTILO PARA ELEMENTOS SELECCIONADOS */
+
+/* Elementos seleccionados con subrayado */
+.tec header [aria-current="page"],
+.tec .header [aria-current="page"],
+.tec [role="banner"] [aria-current="page"],
+.tec .navbar [aria-current="page"],
+.tec nav [aria-current="page"],
+.tec header .active,
+.tec .header .active,
+.tec [role="banner"] .active,
+.tec .navbar .active,
+.tec nav .active,
+.tec header [data-active="true"],
+.tec .header [data-active="true"],
+.tec [role="banner"] [data-active="true"],
+.tec .navbar [data-active="true"],
+.tec nav [data-active="true"],
+.tec header .selected,
+.tec .header .selected,
+.tec [role="banner"] .selected,
+.tec .navbar .selected,
+.tec nav .selected {
+  color: #1b396a !important;
+  position: relative;
+  font-weight: 500;
+  text-shadow: 0 0 1px rgba(255, 255, 255, 0.7);
+}
+
+/* Subrayado para elementos seleccionados */
+.tec header [aria-current="page"]::after,
+.tec .header [aria-current="page"]::after,
+.tec [role="banner"] [aria-current="page"]::after,
+.tec .navbar [aria-current="page"]::after,
+.tec nav [aria-current="page"]::after,
+.tec header .active::after,
+.tec .header .active::after,
+.tec [role="banner"] .active::after,
+.tec .navbar .active::after,
+.tec nav .active::after,
+.tec header [data-active="true"]::after,
+.tec .header [data-active="true"]::after,
+.tec [role="banner"] [data-active="true"]::after,
+.tec .navbar [data-active="true"]::after,
+.tec nav [data-active="true"]::after,
+.tec header .selected::after,
+.tec .header .selected::after,
+.tec [role="banner"] .selected::after,
+.tec .navbar .selected::after,
+.tec nav .selected::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  height: 3px;
+  background-color: white;
+  border-radius: 1.5px;
+}
+
+/* Iconos en elementos seleccionados */
+.tec header [aria-current="page"] svg,
+.tec .header [aria-current="page"] svg,
+.tec [role="banner"] [aria-current="page"] svg,
+.tec .navbar [aria-current="page"] svg,
+.tec nav [aria-current="page"] svg,
+.tec header .active svg,
+.tec .header .active svg,
+.tec [role="banner"] .active svg,
+.tec .navbar .active svg,
+.tec nav .active svg,
+.tec header [data-active="true"] svg,
+.tec .header [data-active="true"] svg,
+.tec [role="banner"] [data-active="true"] svg,
+.tec .navbar [data-active="true"] svg,
+.tec nav [data-active="true"] svg,
+.tec header .selected svg,
+.tec .header .selected svg,
+.tec [role="banner"] .selected svg,
+.tec .navbar .selected svg,
+.tec nav .selected svg {
+  color: #1b396a !important;
+  fill: #1b396a !important;
+  filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.5));
 }
 
 @layer utilities {

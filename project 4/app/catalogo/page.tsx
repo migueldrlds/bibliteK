@@ -1,17 +1,25 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { DashboardLayout } from "@/components/dashboard/layout";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-  DialogDescription,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -24,15 +32,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
 import {
   Tabs,
   TabsContent,
@@ -50,30 +49,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { Badge } from "@/components/ui/badge";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import {
-  Search,
-  Filter,
-  BookOpen,
-  Pencil,
-  Building2,
-  BookCopy,
-  GraduationCap,
-  Bookmark,
-  User,
-  CalendarDays,
-  Trash2,
-  MoreVertical,
-  Plus,
-  Hash,
-  BookText,
-} from "lucide-react";
 import {
   Pagination,
   PaginationContent,
@@ -83,24 +62,62 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import { 
+  MoreHorizontal, 
+  Plus, 
+  Search, 
+  Check, 
+  Trash, 
+  Pencil, 
+  Hash, 
+  User, 
+  GraduationCap, 
+  Building2, 
+  BookText,
+  Filter,
+  BookOpen,
+  BookCopy,
+  MoreVertical,
+  Trash2,
+  Bookmark,
+  CalendarDays
+} from "lucide-react";
+import Image from "next/image";
+import { Card, CardContent } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import * as z from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { bookService, Book as ApiBook } from "@/services/bookService";
 import { getCachedBookCover } from "@/services/bookCoverService";
 import { loanService, Loan } from "@/services/loanService";
 import { cn } from "@/lib/utils";
 import { useUser } from "@/context/user-context";
 import { useRouter } from "next/navigation";
+import React from "react";
+import { useToast } from "@/hooks/use-toast";
 
 // Schema for book form validation
 const bookSchema = z.object({
-  id: z.string().min(1, "El ID es requerido"),
-  title: z.string().min(1, "El título es requerido"),
-  author: z.string().min(1, "El autor es requerido"),
-  category: z.string().min(1, "La categoría es requerida"),
-  classification: z.string().min(1, "La clasificación es requerida"),
-  available: z.coerce.number().min(0, "Debe ser un número positivo"),
-  image: z.string().url("Debe ser una URL válida").optional().or(z.literal("")),
-  location: z.object({
-    campus: z.string().min(1, "El campus es requerido"),
+  id_libro: z.string().min(1, "El ID es requerido"),
+  titulo: z.string().min(1, "El título es requerido"),
+  autor: z.string().min(1, "El autor es requerido"),
+  clasificacion: z.string().optional(),
+  inventory: z.object({
+    tomasAquino: z.coerce.number().min(0, "Debe ser un número positivo"),
+    otay: z.coerce.number().min(0, "Debe ser un número positivo"),
   }),
 });
 
@@ -188,7 +205,7 @@ const campuses = [
 
 // Definir la interfaz para un ítem de inventario
 interface Inventory {
-  id: number;
+  id?: number;
   documentId?: string;
   Campus: string;
   Cantidad: number;
@@ -224,6 +241,7 @@ function CatalogoContent() {
   const [isLoadingLoans, setIsLoadingLoans] = useState(false);
   const [loanError, setLoanError] = useState<string | null>(null);
   const router = useRouter();
+  const { toast } = useToast();
   
   // Definir la función fetchBooks aquí, antes de usarla en useEffect
   const fetchBooks = async () => {
@@ -273,6 +291,18 @@ function CatalogoContent() {
     }
   };
 
+  // Agregamos un debounce para la búsqueda
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(searchTerm);
+  
+  // Use effect para gestionar el debounce de la búsqueda
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 500); // Espera 500ms después de que el usuario deja de escribir
+    
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
   // TODOS los useEffect juntos
   useEffect(() => {
     if (!loading && isAuthenticated && permissions && !permissions.canAccessCatalogo) {
@@ -285,7 +315,7 @@ function CatalogoContent() {
     if (!loading && permissions?.canAccessCatalogo) {
       fetchBooks();
     }
-  }, [currentPage, searchTerm, selectedCategory, selectedLCC, selectedCampus, loading, permissions]);
+  }, [currentPage, debouncedSearchTerm, selectedCategory, selectedLCC, selectedCampus, loading, permissions]);
   
   // Efecto para cargar las portadas de los libros
   useEffect(() => {
@@ -340,16 +370,14 @@ function CatalogoContent() {
   const form = useForm<z.infer<typeof bookSchema>>({
     resolver: zodResolver(bookSchema),
     defaultValues: {
-      id: `LIB-${new Date().getFullYear()}-001`,
-      title: "",
-      author: "",
-      category: "",
-      classification: "",
-      available: 1,
-      image: "",
-      location: {
-        campus: "",
-      },
+      id_libro: `LIB-${new Date().getFullYear()}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`,
+      titulo: "",
+      autor: "",
+      clasificacion: "",
+      inventory: {
+        tomasAquino: 0,
+        otay: 0
+      }
     },
   });
 
@@ -414,8 +442,8 @@ function CatalogoContent() {
       id: book.id_libro,
       title: book.titulo,
       author: book.autor,
-      category: book.clasificacion.split(',')[0],
-      classification: book.clasificacion,
+      category: book.clasificacion?.split(',')[0] || "Sin categoría",
+      classification: book.clasificacion || "Sin clasificación",
       available: totalAvailable,
       total: totalAvailable,
       entryDate: book.createdAt?.split('T')[0] || new Date().toISOString().split('T')[0],
@@ -432,23 +460,64 @@ function CatalogoContent() {
   // Handle form submission
   async function onSubmit(values: z.infer<typeof bookSchema>) {
     try {
+      // Preparar los inventarios - solo los que tienen cantidad mayor a 0
+      const inventories = [
+        { Campus: "Tomas Aquino", Cantidad: values.inventory.tomasAquino },
+        { Campus: "Otay", Cantidad: values.inventory.otay }
+      ].filter(inv => inv.Cantidad > 0);
+      
+      // Confirmar que tenemos inventarios
+      if (inventories.length === 0) {
+        toast({
+          title: "Sin inventario",
+          description: "Por favor, agrega al menos un ejemplar en algún campus",
+          variant: "destructive"
+        });
+        return;
+      }
+      
       if (isEditDialogOpen && selectedBook) {
         // Actualizar libro
-        await bookService.updateBook(selectedBook.id, {
-          titulo: values.title,
-          autor: values.author,
-          clasificacion: values.classification,
-          id_libro: values.id,
-          campus: values.location.campus
+        console.log("Actualizando libro con inventarios:", inventories);
+        // Usar una aserción de tipo para evitar problemas de tipiado
+        const bookDataUpdate = {
+          id_libro: values.id_libro,
+          titulo: values.titulo,
+          autor: values.autor,
+          clasificacion: values.clasificacion,
+          inventories: inventories
+        } as any; // Usamos any para evitar errores de tipo
+        
+        const response = await bookService.updateBook(selectedBook.id, bookDataUpdate);
+        console.log("Libro actualizado correctamente:", response);
+        
+        // Notificación de éxito elegante
+        toast({
+          title: "Libro actualizado",
+          description: `El libro "${values.titulo}" ha sido actualizado correctamente`,
+          variant: "default"
         });
       } else {
-        // Crear libro nuevo
-        await bookService.createBook({
-          id_libro: values.id,
-          titulo: values.title,
-          autor: values.author,
-          clasificacion: values.classification,
-          campus: values.location.campus
+        // Crear libro nuevo con inventarios incluidos
+        console.log("Creando libro nuevo con inventarios:", inventories);
+        // Usar una aserción de tipo para evitar problemas de tipiado
+        const bookDataCreate = {
+          id_libro: values.id_libro,
+          titulo: values.titulo,
+          autor: values.autor,
+          clasificacion: values.clasificacion,
+          inventories: inventories
+        } as any; // Usamos any para evitar errores de tipo
+        
+        console.log("Enviando datos para crear libro:", bookDataCreate);
+        const bookResponse = await bookService.createBook(bookDataCreate);
+        console.log("Libro creado correctamente:", bookResponse);
+        
+        // Notificación de éxito elegante
+        toast({
+          title: "Libro creado",
+          description: `El libro "${values.titulo}" ha sido agregado correctamente`,
+          variant: "default"
         });
       }
       
@@ -461,24 +530,43 @@ function CatalogoContent() {
       form.reset();
     } catch (error) {
       console.error("Error al guardar libro:", error);
+      // Mostrar error al usuario con notificación elegante
+      toast({
+        title: "Error al guardar",
+        description: "No se pudo guardar el libro. Por favor, verifica los datos e intenta nuevamente.",
+        variant: "destructive"
+      });
     }
   }
 
   // Handle edit book
-  function handleEdit(book: typeof books[0]) {
+  function handleEdit(book: BookWithInventories) {
     setSelectedBook(book);
+    
+    // Obtener cantidades de inventario si existen
+    let tomasAquinoQuantity = 0;
+    let otayQuantity = 0;
+    
+    // Si el libro tiene inventarios, obtener las cantidades
+    if (book.inventories && book.inventories.length > 0) {
+      const tomasAquinoInv = book.inventories.find(inv => inv.Campus === "Tomas Aquino");
+      const otayInv = book.inventories.find(inv => inv.Campus === "Otay");
+      
+      if (tomasAquinoInv) tomasAquinoQuantity = tomasAquinoInv.Cantidad;
+      if (otayInv) otayQuantity = otayInv.Cantidad;
+    }
+    
     form.reset({
-      id: book.id,
-      title: book.title,
-      author: book.author,
-      category: book.category,
-      classification: book.classification,
-      available: book.available,
-      image: book.image || "",
-      location: {
-        campus: book.location.campus,
-      },
+      id_libro: book.id,
+      titulo: book.title,
+      autor: book.author,
+      clasificacion: book.classification,
+      inventory: {
+        tomasAquino: tomasAquinoQuantity,
+        otay: otayQuantity
+      }
     });
+    
     setIsEditDialogOpen(true);
   }
 
@@ -531,182 +619,195 @@ function CatalogoContent() {
   }
 
   // Book form dialog content
-  const BookFormContent = ({ isEdit = false }) => (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <FormField
-          control={form.control}
-          name="id"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>ID del Libro*</FormLabel>
-              <FormControl>
-                <div className="relative">
-                  <Hash className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
-                  <Input
-                    {...field}
-                    className="pl-10"
-                    disabled={isEdit}
-                    placeholder="ID generado automáticamente"
-                  />
-                </div>
-              </FormControl>
-              <FormDescription>
-                ID generado automáticamente. Puede cambiarlo si lo desea.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+  const BookFormContent = ({ isEdit = false }) => {
+    return (
+      <div className="py-4">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+          {/* Sección: Información del libro */}
+          <div className="space-y-5 bg-card rounded-lg p-6 border shadow-sm">
+            <div className="flex items-center gap-3 mb-6 pb-3 border-b">
+              <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-2 rounded-lg shadow-sm">
+                <BookText className="w-5 h-5 text-white" />
+              </div>
+              <h3 className="text-lg font-semibold">Información del libro</h3>
+            </div>
+            
+            <div className="grid md:grid-cols-2 gap-6">
+              <div>
+                <label htmlFor="id_libro" className="block text-sm font-medium mb-2 flex items-center gap-2">
+                  <div className="p-1.5 rounded-md bg-slate-100 dark:bg-slate-800">
+                    <Hash className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+                  </div>
+                  ID del Libro*
+                </label>
+                <input
+                  id="id_libro"
+                  disabled={isEdit}
+                  className="w-full h-11 px-3 rounded-md border border-input bg-background"
+                  placeholder="ID generado automáticamente"
+                  {...form.register("id_libro")}
+                />
+                {form.formState.errors.id_libro && (
+                  <p className="text-sm text-red-500 mt-1">
+                    {form.formState.errors.id_libro.message}
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  ID generado automáticamente. Puede cambiarlo si lo desea.
+                </p>
+              </div>
 
-        <FormField
-          control={form.control}
-          name="title"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Título*</FormLabel>
-              <FormControl>
-                <div className="relative">
-                  <BookText className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
-                  <Input {...field} className="pl-10" placeholder="Título del libro" />
-                </div>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+              <div>
+                <label htmlFor="titulo" className="block text-sm font-medium mb-2 flex items-center gap-2">
+                  <div className="p-1.5 rounded-md bg-amber-100 dark:bg-amber-900/30">
+                    <BookText className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                  </div>
+                  Título*
+                </label>
+                <input
+                  id="titulo"
+                  className="w-full h-11 px-3 rounded-md border border-input bg-background"
+                  placeholder="Título del libro"
+                  {...form.register("titulo")}
+                />
+                {form.formState.errors.titulo && (
+                  <p className="text-sm text-red-500 mt-1">
+                    {form.formState.errors.titulo.message}
+                  </p>
+                )}
+              </div>
 
-        <FormField
-          control={form.control}
-          name="author"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Autor*</FormLabel>
-              <FormControl>
-                <div className="relative">
-                  <User className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
-                  <Input {...field} className="pl-10" placeholder="Autor del libro" />
-                </div>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+              <div>
+                <label htmlFor="autor" className="block text-sm font-medium mb-2 flex items-center gap-2">
+                  <div className="p-1.5 rounded-md bg-green-100 dark:bg-green-900/30">
+                    <User className="h-4 w-4 text-green-600 dark:text-green-400" />
+                  </div>
+                  Autor*
+                </label>
+                <input
+                  id="autor"
+                  className="w-full h-11 px-3 rounded-md border border-input bg-background"
+                  placeholder="Autor del libro"
+                  {...form.register("autor")}
+                />
+                {form.formState.errors.autor && (
+                  <p className="text-sm text-red-500 mt-1">
+                    {form.formState.errors.autor.message}
+                  </p>
+                )}
+              </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="category"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Categoría*</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar categoría" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="all">Todas las categorías</SelectItem>
-                    {categories.map((category) => (
-                      <SelectItem key={category} value={category}>
-                        {category}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+              <div>
+                <label htmlFor="clasificacion" className="block text-sm font-medium mb-2 flex items-center gap-2">
+                  <div className="p-1.5 rounded-md bg-red-100 dark:bg-red-900/30">
+                    <GraduationCap className="h-4 w-4 text-red-600 dark:text-red-400" />
+                  </div>
+                  Clasificación
+                </label>
+                <input
+                  id="clasificacion"
+                  className="w-full h-11 px-3 rounded-md border border-input bg-background"
+                  placeholder="Ej: QA76.73.P98"
+                  {...form.register("clasificacion")}
+                />
+                {form.formState.errors.clasificacion && (
+                  <p className="text-sm text-red-500 mt-1">
+                    {form.formState.errors.clasificacion.message}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+            
+          {/* Sección: Inventario por Campus */}
+          <div className="space-y-5 bg-card rounded-lg p-6 border shadow-sm">
+            <div className="flex items-center gap-3 mb-6 pb-3 border-b">
+              <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-2 rounded-lg shadow-sm">
+                <Building2 className="w-5 h-5 text-white" />
+              </div>
+              <h3 className="text-lg font-semibold">Inventario por Campus</h3>
+            </div>
+            
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 border border-blue-100 dark:border-blue-950">
+                <label htmlFor="tomasAquino" className="block text-sm font-medium mb-2 flex items-center gap-2">
+                  <div className="p-1.5 rounded-md bg-blue-100 dark:bg-blue-900/50">
+                    <Building2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  Campus Tomas Aquino
+                </label>
+                <input
+                  id="tomasAquino"
+                  type="number"
+                  min="0"
+                  className="w-full h-11 px-3 rounded-md border border-input bg-white dark:bg-background"
+                  placeholder="Cantidad disponible"
+                  {...form.register("inventory.tomasAquino", { valueAsNumber: true })}
+                />
+                {form.formState.errors.inventory?.tomasAquino && (
+                  <p className="text-sm text-red-500 mt-1">
+                    {form.formState.errors.inventory.tomasAquino.message}
+                  </p>
+                )}
+              </div>
+              
+              <div className="bg-purple-50 dark:bg-purple-950/30 rounded-lg p-4 border border-purple-100 dark:border-purple-950">
+                <label htmlFor="otay" className="block text-sm font-medium mb-2 flex items-center gap-2">
+                  <div className="p-1.5 rounded-md bg-purple-100 dark:bg-purple-900/50">
+                    <Building2 className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                  </div>
+                  Campus Otay
+                </label>
+                <input
+                  id="otay"
+                  type="number"
+                  min="0"
+                  className="w-full h-11 px-3 rounded-md border border-input bg-white dark:bg-background"
+                  placeholder="Cantidad disponible"
+                  {...form.register("inventory.otay", { valueAsNumber: true })}
+                />
+                {form.formState.errors.inventory?.otay && (
+                  <p className="text-sm text-red-500 mt-1">
+                    {form.formState.errors.inventory.otay.message}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
 
-          <FormField
-            control={form.control}
-            name="classification"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Clasificación*</FormLabel>
-                <FormControl>
-                  <Input {...field} placeholder="Ej: QA76.73.P98" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="available"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Unidades disponibles*</FormLabel>
-                <FormControl>
-                  <Input {...field} type="number" min="0" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="location.campus"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Campus*</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar campus" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="all">Todos los campus</SelectItem>
-                    {campuses.map((campus) => (
-                      <SelectItem key={campus} value={campus}>
-                        {campus}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-
-        <FormField
-          control={form.control}
-          name="image"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>URL de la imagen de portada</FormLabel>
-              <FormControl>
-                <Input {...field} placeholder="https://ejemplo.com/imagen.jpg" />
-              </FormControl>
-              <FormDescription>
-                URL de la imagen de portada (opcional)
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <div className="flex justify-end gap-3">
-          <Button variant="outline" type="button" onClick={() => {
-            setIsAddDialogOpen(false);
-            setIsEditDialogOpen(false);
-            form.reset();
-          }}>
-            Cancelar
-          </Button>
-          <Button type="submit">{isEdit ? "Actualizar" : "Agregar"}</Button>
-        </div>
-      </form>
-    </Form>
-  );
+          <div className="flex justify-end gap-3 pt-5 border-t mt-8">
+            <button 
+              type="button" 
+              className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-11 px-5 py-2"
+              onClick={() => {
+                setIsAddDialogOpen(false);
+                setIsEditDialogOpen(false);
+                form.reset();
+              }}
+            >
+              Cancelar
+            </button>
+            <button 
+              type="submit"
+              className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-5 py-2"
+            >
+              {isEdit ? (
+                <>
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Actualizar
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Agregar
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  };
 
   // LUEGO las verificaciones y retornos condicionales
   if (loading || (isAuthenticated && !permissions)) {
@@ -740,7 +841,7 @@ function CatalogoContent() {
             placeholder="Buscar por título, autor, ID..."
             className="pl-9"
             value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
+            onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
         <DropdownMenu>
@@ -838,14 +939,19 @@ function CatalogoContent() {
               </Button>
               )}
             </DialogTrigger>
-        <DialogContent className="sm:max-w-[625px] max-h-[85vh] overflow-y-auto">
-              <DialogHeader>
-            <DialogTitle>Añadir nuevo libro</DialogTitle>
+        <DialogContent className="sm:max-w-[650px] max-h-[85vh] overflow-y-auto">
+              <DialogHeader className="space-y-2 pb-4 border-b">
+                <div className="flex items-center space-x-2">
+                  <div className="bg-primary p-1.5 rounded-md">
+                    <BookOpen className="h-5 w-5 text-primary-foreground" />
+                  </div>
+                  <DialogTitle className="text-xl">Añadir nuevo libro</DialogTitle>
+                </div>
                 <DialogDescription>
-              Completa la información para añadir un nuevo libro al catálogo.
+                  Completa la información para añadir un nuevo libro al catálogo.
                 </DialogDescription>
               </DialogHeader>
-          <BookFormContent isEdit={false} />
+              <BookFormContent isEdit={false} />
             </DialogContent>
           </Dialog>
     </div>
@@ -1106,9 +1212,14 @@ function CatalogoContent() {
     </AlertDialog>
 
     <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-      <DialogContent className="sm:max-w-[625px] max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Editar libro</DialogTitle>
+      <DialogContent className="sm:max-w-[650px] max-h-[85vh] overflow-y-auto">
+        <DialogHeader className="space-y-2 pb-4 border-b">
+          <div className="flex items-center space-x-2">
+            <div className="bg-primary p-1.5 rounded-md">
+              <Pencil className="h-5 w-5 text-primary-foreground" />
+            </div>
+            <DialogTitle className="text-xl">Editar libro</DialogTitle>
+          </div>
           <DialogDescription>
             Actualiza la información del libro en el catálogo.
           </DialogDescription>

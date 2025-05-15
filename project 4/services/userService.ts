@@ -1,100 +1,123 @@
-import fetchAPI from '../lib/api';
+import { apiService } from './apiService';
 
+// Interfaz para representar los datos de usuario
 export interface User {
-  id: number | string;
-  documentId?: string;
+  id: number;
   username: string;
   email: string;
-  numcontrol?: string;
-  Numcontrol?: string;
-  role: string;
-  createdAt: string;
-  updatedAt?: string;
-  publishedAt?: string;
-  blocked?: boolean;
+  provider?: string;
   confirmed?: boolean;
+  blocked?: boolean;
+  role?: string;
+  createdAt: string;
+  updatedAt: string;
+  Numcontrol?: string;
+  numcontrol?: string;
+  Carrera?: string;
+  Genero?: string;
+  campus?: string;
+  documentId?: string;
+  Estado?: string;
+  rol?: string;
+}
+
+// Interfaz para datos a enviar al crear usuario
+export interface CreateUserData {
+  username: string;
+  email: string;
+  password: string;
+  Numcontrol?: string;
   campus?: string;
   Genero?: string;
   Carrera?: string;
   Estado?: string;
+  rol?: string;
+  confirmed?: boolean;
 }
 
 export const userService = {
-  // Obtener todos los usuarios (requiere permisos de admin)
-  getUsers: async (): Promise<User[]> => {
+  // Obtener todos los usuarios
+  async getUsers(): Promise<User[]> {
     try {
-      console.log("Solicitando lista de usuarios");
-      // Obtener todos los datos de los usuarios con su rol
-      const response = await fetchAPI('/api/users?populate=role');
-      console.log("Respuesta del API de usuarios:", response);
+      // Llamar al API con el método GET
+      const response = await apiService.get('/api/users', { 
+        params: { 'populate': '*' } 
+      });
       
-      // Mapear la respuesta al formato esperado
+      // Si la respuesta es un array, devolverlo directamente
       if (Array.isArray(response)) {
-        return response.map(user => ({
-          id: user.id,
-          documentId: user.documentId,
-          username: user.username || 'Sin nombre',
-          email: user.email || 'Sin email',
-          numcontrol: user.Numcontrol?.toString() || user.numcontrol?.toString() || '',
-          Numcontrol: user.Numcontrol,
-          role: user.role?.type || 
-                (user.role?.data?.attributes?.type) || 
-                (user.role?.data?.attributes?.name) || 
-                'authenticated',
-          createdAt: user.createdAt || new Date().toISOString(),
-          updatedAt: user.updatedAt,
-          publishedAt: user.publishedAt,
-          blocked: user.blocked || false,
-          confirmed: user.confirmed || false,
-          // Incluir campos adicionales
-          campus: user.campus,
-          Genero: user.Genero,
-          Carrera: user.Carrera,
-          Estado: user.Estado
-        }));
+        return response;
       }
       
+      // Si la respuesta tiene una propiedad 'data', extraer los datos
+      if (response && typeof response === 'object' && 'data' in response) {
+        if (Array.isArray(response.data)) {
+          return response.data;
+        }
+      }
+      
+      // Si no se ajusta a ninguno de los formatos esperados, devolver un array vacío
+      console.error('Formato de respuesta inesperado al obtener usuarios:', response);
       return [];
     } catch (error) {
-      console.error("Error obteniendo usuarios:", error);
+      console.error('Error al obtener usuarios:', error);
       throw error;
     }
   },
-
-  // Obtener un usuario específico por ID
-  getUser: async (id: string): Promise<User | null> => {
+  
+  // Obtener un usuario por ID
+  async getUserById(id: number | string): Promise<User | null> {
     try {
-      console.log(`Obteniendo usuario con ID ${id}`);
-      const response = await fetchAPI(`/api/users/${id}?populate=role`);
+      const response = await apiService.get(`/api/users/${id}`, { 
+        params: { 'populate': '*' } 
+      });
       
-      if (response) {
-        return {
-          id: response.id,
-          documentId: response.documentId,
-          username: response.username || 'Sin nombre',
-          email: response.email || 'Sin email',
-          numcontrol: response.Numcontrol?.toString() || response.numcontrol?.toString() || '',
-          Numcontrol: response.Numcontrol,
-          role: response.role?.type || 
-                (response.role?.data?.attributes?.type) || 
-                (response.role?.data?.attributes?.name) || 
-                'authenticated',
-          createdAt: response.createdAt || new Date().toISOString(),
-          updatedAt: response.updatedAt,
-          publishedAt: response.publishedAt,
-          blocked: response.blocked || false,
-          confirmed: response.confirmed || false,
-          // Incluir campos adicionales
-          campus: response.campus,
-          Genero: response.Genero,
-          Carrera: response.Carrera,
-          Estado: response.Estado
-        };
+      if (response && typeof response === 'object') {
+        return response;
       }
       
       return null;
     } catch (error) {
-      console.error(`Error obteniendo usuario con ID ${id}:`, error);
+      console.error(`Error al obtener usuario con ID ${id}:`, error);
+      throw error;
+    }
+  },
+
+  // Crear un nuevo usuario
+  async createUser(userData: CreateUserData): Promise<User> {
+    try {
+      console.log('Creando usuario con datos:', userData);
+      
+      // En Strapi v4, hay que enviar los datos dentro de un objeto 'data'
+      const response = await apiService.post('/api/users', userData);
+      
+      console.log('Respuesta al crear usuario:', response);
+      
+      // Devolver los datos del usuario creado
+      return response;
+    } catch (error) {
+      console.error('Error al crear usuario:', error);
+      throw error;
+    }
+  },
+
+  // Actualizar un usuario existente
+  async updateUser(id: number | string, userData: Partial<User>): Promise<User> {
+    try {
+      const response = await apiService.put(`/api/users/${id}`, userData);
+      return response;
+    } catch (error) {
+      console.error(`Error al actualizar usuario con ID ${id}:`, error);
+      throw error;
+    }
+  },
+
+  // Eliminar un usuario
+  async deleteUser(id: number | string): Promise<void> {
+    try {
+      await apiService.delete(`/api/users/${id}`);
+    } catch (error) {
+      console.error(`Error al eliminar usuario con ID ${id}:`, error);
       throw error;
     }
   }
