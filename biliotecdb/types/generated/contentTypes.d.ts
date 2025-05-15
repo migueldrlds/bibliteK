@@ -406,6 +406,35 @@ export interface ApiBookBook extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiHolidayHoliday extends Struct.CollectionTypeSchema {
+  collectionName: 'holidays';
+  info: {
+    description: '';
+    displayName: 'Holiday';
+    pluralName: 'holidays';
+    singularName: 'holiday';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    date: Schema.Attribute.Date & Schema.Attribute.Unique;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::holiday.holiday'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiInventoryInventory extends Struct.CollectionTypeSchema {
   collectionName: 'inventories';
   info: {
@@ -1006,6 +1035,7 @@ declare module '@strapi/strapi' {
       'admin::transfer-token-permission': AdminTransferTokenPermission;
       'admin::user': AdminUser;
       'api::book.book': ApiBookBook;
+      'api::holiday.holiday': ApiHolidayHoliday;
       'api::inventory.inventory': ApiInventoryInventory;
       'api::loan.loan': ApiLoanLoan;
       'plugin::content-releases.release': PluginContentReleasesRelease;
