@@ -696,8 +696,12 @@ export default function DashboardPage() {
                   >
                     <defs>
                       <linearGradient id="loanGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0}/>
+                        <stop offset="5%" stopColor="rgb(168,193,247)" stopOpacity={0.8} />
+                        <stop offset="95%" stopColor="rgb(168,193,247)" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="loanGradientDark" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#142D65" stopOpacity={0.8} />
+                        <stop offset="95%" stopColor="#142D65" stopOpacity={0} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
@@ -724,9 +728,9 @@ export default function DashboardPage() {
                       type="monotone"
                       dataKey="loans"
                       name="Préstamos"
-                      stroke="hsl(var(--chart-1))"
+                      stroke={typeof window !== 'undefined' && document.documentElement.classList.contains('dark') ? '#142D65' : 'rgb(168,193,247)'}
                       fillOpacity={1}
-                      fill="url(#loanGradient)"
+                      fill={typeof window !== 'undefined' && document.documentElement.classList.contains('dark') ? 'url(#loanGradientDark)' : 'url(#loanGradient)'}
                       activeDot={{
                         onClick: (e: any) => {
                           if (e && e.index !== undefined) {
@@ -789,7 +793,7 @@ export default function DashboardPage() {
                     />
                     <Bar 
                       dataKey="value" 
-                      fill="hsl(var(--chart-2))" 
+                      fill="#2563EB" 
                       radius={[0, 4, 4, 0]} 
                       name="Cantidad"
                     />

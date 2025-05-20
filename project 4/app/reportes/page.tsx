@@ -172,6 +172,8 @@ const diasSemana = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 const COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 
                 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
 
+const CATEGORY_COLORS = ['#2563EB', '#60A8FB', '#3B86F7', '#90C7FE', '#BEDCFE'];
+
 // Componente GlowCard para efecto de tarjeta con brillo
 export function GlowCard({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   const ref = useRef<HTMLDivElement>(null);
@@ -1113,7 +1115,7 @@ export default function ReportesPage() {
                         label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                       >
                         {categoryData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]} />
                         ))}
                       </Pie>
                       <Tooltip
@@ -1175,9 +1177,12 @@ export default function ReportesPage() {
                       <Bar 
                         dataKey="value" 
                         name="Cantidad de Préstamos" 
-                        fill="hsl(var(--chart-5))" 
                         radius={[0, 4, 4, 0]} 
-                      />
+                      >
+                        {popularBooksData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={index % 2 === 0 ? '#2563EB' : '#5EA4F5'} />
+                        ))}
+                      </Bar>
                     </RechartsBarChart>
                   </ResponsiveContainer>
                 </div>

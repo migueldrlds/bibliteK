@@ -147,7 +147,7 @@ const getStatusBadge = (status: string) => {
   };
 
   return (
-    <Badge className={styles[status]}>
+    <Badge className={styles[status] + " rounded-md"}>
       <div className="flex items-center">
         {icons[status]}
         {labels[status]}
@@ -182,10 +182,22 @@ const getReturnTypeBadge = (returnType: string | null) => {
 // Función para obtener el badge de campus
 const getCampusBadge = (campus: string | undefined) => {
   if (!campus) return <span className="text-muted-foreground text-xs">Sin campus</span>;
-  
+
+  // Estilo tipo "pill" blanco con borde y texto gris para Tomas Aquino y Otay
+  if (["tomas aquino", "otay"].includes(campus.toLowerCase())) {
+    return (
+      <Badge
+        variant="outline"
+        className="bg-white text-gray-700 border border-gray-300 dark:bg-transparent dark:text-gray-200 dark:border-gray-500 font-medium text-xs px-3 py-0.5 rounded-md flex items-center gap-1 shadow-sm"
+      >
+        <MapPin className="h-3 w-3 -ml-1 mr-1 text-gray-400 dark:text-gray-400" />
+        <span className="-ml-0.5">{campus}</span>
+      </Badge>
+    );
+  }
+
+  // Estilo original para otros campus
   let bgColor = "";
-  
-  // Asignar color según el campus
   switch (campus.toLowerCase()) {
     case "otay":
       bgColor = "bg-purple-500 hover:bg-purple-600";
@@ -196,9 +208,9 @@ const getCampusBadge = (campus: string | undefined) => {
     default:
       bgColor = "bg-blue-500 hover:bg-blue-600";
   }
-  
+
   return (
-    <Badge className={`${bgColor} text-xs px-2 py-0.5`}>
+    <Badge className={`${bgColor} text-xs px-2 py-0.5 rounded-md`}>
       <div className="flex items-center">
         <MapPin className="h-3 w-3 mr-1" />
         {campus}
