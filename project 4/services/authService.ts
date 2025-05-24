@@ -32,7 +32,15 @@ export const authService = {
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem('bibliotech-token', response.jwt);
         localStorage.setItem('bibliotech-role', userRole);
-        console.log(`Token y rol guardados en localStorage: ${userRole}`);
+        localStorage.setItem('bibliotech-user', JSON.stringify({
+          id: response.user.id,
+          username: response.user.username,
+          email: response.user.email,
+          role: userRole,
+          numcontrol: response.user.Numcontrol || '',
+          createdAt: response.user.createdAt
+        }));
+        console.log(`Token, rol y usuario guardados en localStorage: ${userRole}`);
       }
       
       // Retornar el usuario y token directamente desde la respuesta de Strapi
@@ -91,7 +99,15 @@ export const authService = {
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem('bibliotech-token', response.jwt);
         localStorage.setItem('bibliotech-role', initialRole);
-        console.log(`Token y rol guardados en localStorage: ${initialRole}`);
+        localStorage.setItem('bibliotech-user', JSON.stringify({
+          id: response.user.id,
+          username: response.user.username,
+          email: response.user.email,
+          role: initialRole,
+          numcontrol: userData.numcontrol || '',
+          createdAt: response.user.createdAt
+        }));
+        console.log(`Token, rol y usuario guardados en localStorage: ${initialRole}`);
       }
       
       // Si el registro fue exitoso y tenemos numcontrol, actualizar el usuario

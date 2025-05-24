@@ -1,0 +1,30 @@
+{
+  "kind": "collectionType",
+  "collectionName": "campuses",
+  "info": {
+    "singularName": "campus",
+    "pluralName": "campuses",
+    "displayName": "Campus"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "attributes": {
+    "Nombre": {
+      "type": "string",
+      "required": true
+    },
+    "carreras": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::carrera.carrera",
+      "mappedBy": "campus"
+    },
+    "users": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "plugin::users-permissions.user",
+      "mappedBy": "campus"
+    }
+  }
+}

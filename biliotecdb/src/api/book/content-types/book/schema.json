@@ -48,6 +48,12 @@
       "relation": "oneToMany",
       "target": "api::inventory.inventory",
       "mappedBy": "book"
+    },
+    "consultas": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::consulta.consulta",
+      "mappedBy": "book"
     }
   }
 }

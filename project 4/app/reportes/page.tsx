@@ -28,10 +28,10 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
+  DialogDescription,
+  DialogFooter
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -102,6 +102,9 @@ import { es } from "date-fns/locale";
 import "@/styles/glow-card.css";
 // Add these imports at the top
 import { useUser } from "@/context/user-context";
+import { saveAs } from "file-saver"; // Asegúrate de instalar file-saver
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
 
 // Interfaz para los usuarios obtenidos directamente de la API
 interface ApiUser {
@@ -255,6 +258,659 @@ const getStatusBadge = (status: string) => {
   );
 };
 
+// Función para descargar las consultas como CSV
+async function descargarConsultasCSV() {
+  try {
+    console.log("Iniciando descarga de CSV usando api.ts...");
+    
+    // Usar populate=* que sabemos que funciona según el curl
+    const response = await fetchAPI("/api/consultas?populate=*");
+    console.log("Consultas obtenidas:", response);
+    
+    // Si llegamos aquí, tenemos datos para procesar
+    const consultas = response.data || [];
+    
+    // Procesar los datos a CSV con todos los campos
+    const encabezados = [
+      "ID", "DocumentID", "Fecha", "IP", "User Agent", 
+      "Creado", "Actualizado", "Publicado",
+      // Datos del libro según schema.json
+      "Libro ID", "ID_Libro", "Título", "Autor", "Clasificación",
+      // Datos del usuario según schema.json
+      "Usuario ID", "Username", "Email", "Num Control", 
+      "Género", "Carrera", "Campus", "Estado", "Rol"
+    ];
+    
+    const filas = consultas.map((consulta: any) => {
+      // Acceder a book y user que pueden ser null
+      const book = consulta.book || {};
+      const user = consulta.user || {};
+      
+      return [
+        consulta.id,
+        consulta.documentId || "",
+        consulta.fecha || "",
+        consulta.ip || "",
+        consulta.user_agent || "",
+        consulta.createdAt || "",
+        consulta.updatedAt || "",
+        consulta.publishedAt || "",
+        // Datos del libro
+        book.id || "",
+        book.id_libro || "",
+        book.titulo || "",
+        book.autor || "",
+        book.clasificacion || "",
+        // Datos del usuario
+        user.id || "",
+        user.username || "",
+        user.email || "",
+        user.Numcontrol || "",
+        user.Genero || "",
+        user.Carrera || "",
+        user.campus || "",
+        user.Estado || "",
+        user.rol || ""
+      ];
+    });
+    
+    const csv = [encabezados, ...filas]
+      .map((row) => row.map((val: any) => `"${val}"`).join(","))
+      .join("\n");
+    
+    // Descargar el archivo
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    saveAs(blob, "consultas_completas.csv");
+    
+    // Mensaje de éxito
+    console.log("CSV generado exitosamente");
+    
+  } catch (apiError: any) {
+    console.error("Error en la API:", apiError);
+    
+    // Mensaje de error más explicativo
+    let errorMessage = "Error al comunicarse con la API.";
+    if (apiError?.message) {
+      errorMessage += ` ${apiError.message}`;
+    }
+    
+    alert(errorMessage);
+  }
+}
+
+// Función para descargar las consultas como Excel
+async function descargarConsultasExcel() {
+  try {
+    console.log("Iniciando descarga de Excel usando api.ts...");
+    
+    // Usar populate=* que sabemos que funciona
+    const response = await fetchAPI("/api/consultas?populate=*");
+    console.log("Datos para Excel:", response);
+    
+    // Si llegamos aquí, tenemos datos para procesar
+    const consultas = response.data || [];
+    
+    // Procesar los datos para Excel
+    const filas = consultas.map((consulta: any) => {
+      // Acceder a book y user que pueden ser null
+      const book = consulta.book || {};
+      const user = consulta.user || {};
+      
+      return {
+        "ID": consulta.id,
+        "DocumentID": consulta.documentId || "",
+        "Fecha": consulta.fecha || "",
+        "IP": consulta.ip || "",
+        "User Agent": consulta.user_agent || "",
+        "Creado": consulta.createdAt || "",
+        "Actualizado": consulta.updatedAt || "",
+        "Publicado": consulta.publishedAt || "",
+        // Datos del libro
+        "Libro ID": book.id || "",
+        "ID_Libro": book.id_libro || "",
+        "Título": book.titulo || "",
+        "Autor": book.autor || "",
+        "Clasificación": book.clasificacion || "",
+        // Datos del usuario
+        "Usuario ID": user.id || "",
+        "Username": user.username || "",
+        "Email": user.email || "",
+        "Num Control": user.Numcontrol || "",
+        "Género": user.Genero || "",
+        "Carrera": user.Carrera || "",
+        "Campus": user.campus || "",
+        "Estado": user.Estado || "",
+        "Rol": user.rol || ""
+      };
+    });
+    
+    // Crear la hoja de Excel
+    const ws = XLSX.utils.json_to_sheet(filas);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Consultas");
+    
+    // Ajustar anchos de columna automáticamente
+    const colWidths = Object.keys(filas[0] || {}).map(k => 
+      Math.max(k.length, ...filas.map((f: any) => String(f[k] || '').length))
+    );
+    ws['!cols'] = colWidths.map(w => ({ wch: w }));
+    
+    // Generar y descargar el archivo
+    const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([excelBuffer], { type: "application/octet-stream" });
+    saveAs(blob, "consultas_completas.xlsx");
+    
+    // Mensaje de éxito
+    console.log("Excel generado exitosamente");
+    
+  } catch (error: any) {
+    console.error("Error en Excel:", error);
+    
+    // Mensaje de error más explicativo
+    let errorMessage = "Error al descargar Excel.";
+    if (error?.message) {
+      errorMessage += ` ${error.message}`;
+    }
+    
+    alert(errorMessage);
+  }
+}
+
+// Función para generar informe oficial
+async function generarInformeOficial() {
+  try {
+    console.log('Iniciando generación de informe...');
+    // Obtener datos de consultas
+    const response = await fetchAPI('/api/consultas?populate=*');
+    const consultas = response.data || [];
+
+    // Cálculo robusto de estadísticas
+    const librosSet = new Set();
+    const usuariosSet = new Set();
+    let hombres = 0;
+    let mujeres = 0;
+    let fechas: Date[] = [];
+
+    consultas.forEach((consulta: any) => {
+      // Libro único
+      const libro = consulta.attributes?.book?.data?.id ||
+                    consulta.attributes?.book?.data?.attributes?.id ||
+                    consulta.book?.id || consulta.book;
+      if (libro) librosSet.add(libro);
+
+      // Usuario único
+      const usuario = consulta.attributes?.user?.data?.id ||
+                      consulta.attributes?.user?.data?.attributes?.id ||
+                      consulta.user?.id || consulta.user;
+      if (usuario) usuariosSet.add(usuario);
+
+      // Género
+      const genero = consulta.attributes?.user?.data?.attributes?.genero ||
+                     consulta.user?.genero || consulta.user?.Genero || '';
+      if (typeof genero === 'string') {
+        if (genero.toLowerCase().includes('hombre') || genero.toLowerCase().includes('masculino')) hombres++;
+        if (genero.toLowerCase().includes('mujer') || genero.toLowerCase().includes('femenino')) mujeres++;
+      }
+
+      // Fechas
+      const fecha = consulta.attributes?.createdAt || consulta.createdAt;
+      if (fecha) {
+        const f = new Date(fecha);
+        if (!isNaN(f.getTime())) fechas.push(f);
+      }
+    });
+
+    // Fechas de primera y última consulta
+    let fechaPrimera = 'N/A';
+    let fechaUltima = 'N/A';
+    if (fechas.length > 0) {
+      const primera = fechas.reduce((a, b) => a < b ? a : b);
+      const ultima = fechas.reduce((a, b) => a > b ? a : b);
+      fechaPrimera = primera.toLocaleDateString('es-MX');
+      fechaUltima = ultima.toLocaleDateString('es-MX');
+    }
+
+    // Obtener nombre del usuario autenticado
+    let nombreUsuario = '';
+    try {
+      const userStr = localStorage.getItem('bibliotech-user');
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        nombreUsuario = user.username || user.name || '';
+      }
+    } catch {}
+
+    // Crear el documento
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 10;
+
+    // Encabezado institucional
+    doc.addImage('https://i.ibb.co/kggfMBJ2/ECD.png', 'PNG', margin, margin, pageWidth - (margin * 2), 30);
+
+    // Encabezado superior derecho: Instituto Tecnológico de Tijuana y bloque de fecha/oficio/asunto
+    doc.setFontSize(11);
+    const instText = 'Instituto Tecnológico de Tijuana';
+    const instTextWidth = doc.getTextWidth(instText);
+    let yEncabezado = 48;
+    doc.setFont('helvetica', 'italic');
+    doc.text(instText, pageWidth - margin - instTextWidth, yEncabezado);
+    yEncabezado += 10;
+
+    // Fecha actual en formato largo
+    const fechaActual = new Date();
+    const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+    const fechaTexto = `Tijuana, Baja California,`;
+    const fechaResaltada = `${fechaActual.getDate()}/${meses[fechaActual.getMonth()]}/${fechaActual.getFullYear()}`;
+    const fechaTextoWidth = doc.getTextWidth(fechaTexto + ' ');
+    const fechaResaltadaWidth = doc.getTextWidth(fechaResaltada);
+    // Imprimir 'Tijuana, Baja California,'
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(0,0,0);
+    doc.text(fechaTexto, pageWidth - margin - fechaTextoWidth - fechaResaltadaWidth - 2, yEncabezado);
+    // Imprimir la fecha resaltada en recuadro negro
+    doc.setFillColor(0,0,0);
+    doc.setTextColor(255,255,255);
+    doc.rect(pageWidth - margin - fechaResaltadaWidth, yEncabezado - 4, fechaResaltadaWidth + 4, 6, 'F');
+    doc.text(fechaResaltada, pageWidth - margin - fechaResaltadaWidth + 2, yEncabezado);
+    doc.setTextColor(0,0,0);
+    yEncabezado += 6;
+
+    // Oficio alineado a la derecha (texto normal, no recuadro)
+    doc.setFont('helvetica', 'normal');
+    const oficioTexto = 'Oficio No. 004/C1/2025';
+    const oficioTextWidth = doc.getTextWidth(oficioTexto);
+    doc.text(oficioTexto, pageWidth - margin - oficioTextWidth, yEncabezado);
+    yEncabezado += 6;
+
+    // Asunto: normal + asunto resaltado
+    const asuntoLabel = 'Asunto:';
+    const asuntoTexto = 'Validación de cifras del 4to trimestre del 2025';
+    const asuntoLabelWidth = doc.getTextWidth(asuntoLabel + ' ');
+    const asuntoTextoWidth = doc.getTextWidth(asuntoTexto);
+    // Imprimir 'Asunto:'
+    doc.text(asuntoLabel, pageWidth - margin - asuntoLabelWidth - asuntoTextoWidth - 2, yEncabezado);
+    // Imprimir asunto resaltado en recuadro negro
+    doc.setFillColor(0,0,0);
+    doc.setTextColor(255,255,255);
+    doc.rect(pageWidth - margin - asuntoTextoWidth, yEncabezado - 4, asuntoTextoWidth + 4, 6, 'F');
+    doc.text(asuntoTexto, pageWidth - margin - asuntoTextoWidth + 2, yEncabezado);
+    doc.setTextColor(0,0,0);
+    yEncabezado += 6;
+
+    // Bloque de destinatario en negritas
+    let yDestinatario = yEncabezado + 6;
+    doc.setFont('helvetica', 'bold');
+    doc.text('JOSÉ ANTONIO AMADOR', margin, yDestinatario);
+    yDestinatario += 7;
+    doc.text('JEFE DEL ÁREA DE CENTROS DE INFORMACIÓN', margin, yDestinatario);
+    yDestinatario += 7;
+    doc.text('PRESENTE', margin, yDestinatario);
+    yDestinatario += 10;
+
+    // Cuerpo del oficio
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Sirva la presente para enviarle un cordial saludo y para validar las cifras reportadas en la encuesta de centro de informacion corresponiente al 2025, mismas que a continuacion enlisto.', margin, yDestinatario, {maxWidth: pageWidth - margin*2});
+
+    // Estadísticas (formato claro)
+    let y = yDestinatario + 20;
+    const labelX = margin;
+    const valueX = margin + 100;
+    const salto = 8;
+    doc.setFont('helvetica', 'bold');
+    doc.text('Cantidad total de consultas:', labelX, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`${consultas.length}`, valueX, y);
+    y += salto;
+    doc.setFont('helvetica', 'bold');
+    doc.text('Cantidad total de libros consultados:', labelX, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`${librosSet.size}`, valueX, y);
+    y += salto;
+    doc.setFont('helvetica', 'bold');
+    doc.text('Cantidad de usuarios que realizaron consultas:', labelX, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`${usuariosSet.size}`, valueX, y);
+    y += salto;
+    doc.setFont('helvetica', 'bold');
+    doc.text('Cantidad de usuarios hombres:', labelX, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`${hombres}`, valueX, y);
+    y += salto;
+    doc.setFont('helvetica', 'bold');
+    doc.text('Cantidad de usuarios mujeres:', labelX, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`${mujeres}`, valueX, y);
+    y += salto;
+    doc.setFont('helvetica', 'bold');
+    doc.text('Fecha de primera consulta:', labelX, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`${fechaPrimera}`, valueX, y);
+    y += salto;
+    doc.setFont('helvetica', 'bold');
+    doc.text('Fecha de última consulta:', labelX, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`${fechaUltima}`, valueX, y);
+    y += 2 * salto;
+
+    // Cierre
+    doc.setFont('helvetica', 'normal');
+    doc.text('Sin más por el momento, quedo de usted para cualquier duda o aclaración.', margin, y, {maxWidth: pageWidth - margin*2});
+    y += 2 * salto;
+
+    // Firma institucional alineada a la izquierda y con formato de referencia
+    doc.setFont('helvetica', 'bold');
+    doc.text('A T E N T A M E N T E', margin, y);
+    y += salto;
+    doc.setFont('helvetica', 'italic');
+    doc.text('Excelencia en Educación Tecnológica®', margin, y);
+    y += salto;
+    doc.text('Por una Juventud Integrada al Desarrollo de México®', margin, y);
+    // No sumar salto aquí para que la siguiente línea quede pegada
+    doc.setFont('helvetica', 'bold');
+    doc.text('CONSUELO FABIOLA FRAUSTO TRUJILLO', margin, y + salto);
+    y += salto * 2;
+    doc.text('JEFA DE DEPARTAMENTO DE CENTRO DE INFORMACIÓN', margin, y);
+    y += salto;
+
+    // Pie de página institucional
+    const pageHeight = doc.internal.pageSize.getHeight();
+    doc.addImage('https://i.ibb.co/S4v1RCdx/PDP.png', 'PNG', margin, pageHeight - 30, pageWidth - (margin * 2), 30);
+
+    // Guardar el documento
+    doc.save('informe_consultas.pdf');
+    console.log('Informe generado exitosamente');
+  } catch (error) {
+    console.error('Error al generar el informe:', error);
+    alert('Error al generar el informe. Por favor, intente nuevamente.');
+  }
+}
+
+// 1. Inventario Completo
+async function descargarInventarioCompleto() {
+  try {
+    let page = 1;
+    const pageSize = 1000; // Ajusta según el máximo permitido por Strapi
+    let total = 0;
+    let libros: any[] = [];
+    do {
+      const response = await fetchAPI(`/api/books?populate=inventories&pagination[page]=${page}&pagination[pageSize]=${pageSize}`);
+      const data = response.data || [];
+      if (page === 1) {
+        total = response.meta?.pagination?.total || data.length;
+      }
+      libros = libros.concat(data);
+      page++;
+    } while (libros.length < total);
+
+    const filas: any[] = [];
+    libros.forEach((libro: any) => {
+      const attrs = libro.attributes || libro;
+      const inventarios = attrs.inventories?.data || attrs.inventories || [];
+      if (inventarios.length === 0) {
+        filas.push({
+          "ID": libro.id || attrs.id || '',
+          "ID_Libro": attrs.id_libro || '',
+          "Título": attrs.titulo || '',
+          "Autor": attrs.autor || '',
+          "Clasificación": attrs.clasificacion || '',
+          "Campus": '',
+          "Cantidad": '',
+          "Creado": attrs.createdAt || '',
+          "Actualizado": attrs.updatedAt || '',
+          "Publicado": attrs.publishedAt || ''
+        });
+      } else {
+        inventarios.forEach((inv: any) => {
+          const invAttrs = inv.attributes || inv;
+          filas.push({
+            "ID": libro.id || attrs.id || '',
+            "ID_Libro": attrs.id_libro || '',
+            "Título": attrs.titulo || '',
+            "Autor": attrs.autor || '',
+            "Clasificación": attrs.clasificacion || '',
+            "Campus": invAttrs.Campus || '',
+            "Cantidad": invAttrs.Cantidad || '',
+            "Creado": attrs.createdAt || '',
+            "Actualizado": attrs.updatedAt || '',
+            "Publicado": attrs.publishedAt || ''
+          });
+        });
+      }
+    });
+    const ws = XLSX.utils.json_to_sheet(filas);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Inventario");
+    const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([excelBuffer], { type: "application/octet-stream" });
+    saveAs(blob, "inventario_completo.xlsx");
+  } catch (error) {
+    alert("Error al descargar el inventario");
+  }
+}
+
+// 2. Préstamos Mensuales
+async function descargarPrestamosMensuales() {
+  try {
+    const response = await fetchAPI('/api/loans?populate=*');
+    const loans = response.data || [];
+    const hoy = new Date();
+    const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    const ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+    const prestamosDelMes = loans.filter((loan: any) => {
+      const fecha = new Date(loan.fecha_prestamo || loan.attributes?.fecha_prestamo);
+      return fecha >= primerDiaMes && fecha <= ultimoDiaMes;
+    });
+    const filas = prestamosDelMes.map((loan: any) => {
+      const attrs = loan.attributes || loan;
+      const book = attrs.book?.data?.attributes || attrs.book || {};
+      const user = attrs.usuario?.data?.attributes || attrs.usuario || {};
+      return {
+        "ID Préstamo": loan.id || attrs.id || '',
+        // Datos del libro
+        "ID Libro": attrs.book?.data?.id || book.id || '',
+        "ID_Libro": book.id_libro || '',
+        "Título": book.titulo || '',
+        "Autor": book.autor || '',
+        "Clasificación": book.clasificacion || '',
+        // Datos del usuario
+        "Usuario": user.username || '',
+        "Num Control": user.Numcontrol || '',
+        "Carrera": user.Carrera || '',
+        // Fechas y estado
+        "Fecha Préstamo": attrs.fecha_prestamo || '',
+        "Fecha Devolución Esperada": attrs.fecha_devolucion_esperada || '',
+        "Fecha Devolución Real": attrs.fecha_devolucion_real || '',
+        "Estado": attrs.estado || '',
+        "Notas": attrs.notas || ''
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(filas);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "PrestamosMes");
+    const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([excelBuffer], { type: "application/octet-stream" });
+    saveAs(blob, "prestamos_mensuales.xlsx");
+  } catch (error) {
+    alert("Error al descargar préstamos mensuales");
+  }
+}
+
+// 3. Usuarios por Carrera
+async function descargarUsuariosPorCarrera() {
+  try {
+    const usuarios = await fetchAPI('/api/users');
+    const filas = usuarios.map((user: any) => ({
+      "ID": user.id,
+      "Username": user.username,
+      "Email": user.email,
+      "Num Control": user.Numcontrol || '',
+      "Carrera": user.Carrera || '',
+      "Campus": user.campus || '',
+      "Estado": user.Estado || '',
+      "Rol": user.rol || '',
+      "Creado": user.createdAt || '',
+      "Actualizado": user.updatedAt || '',
+      "Publicado": user.publishedAt || ''
+    }));
+    const ws = XLSX.utils.json_to_sheet(filas);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "UsuariosCarrera");
+    const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([excelBuffer], { type: "application/octet-stream" });
+    saveAs(blob, "usuarios_por_carrera.xlsx");
+  } catch (error) {
+    alert("Error al descargar usuarios por carrera");
+  }
+}
+
+// 4. Devoluciones Pendientes
+async function descargarDevolucionesPendientes() {
+  try {
+    const response = await fetchAPI('/api/loans?populate=*');
+    const loans = response.data || [];
+    const pendientes = loans.filter((loan: any) => {
+      const estado = loan.estado || loan.attributes?.estado;
+      return estado === 'atrasado';
+    });
+    const filas = pendientes.map((loan: any) => {
+      const attrs = loan.attributes || loan;
+      // Obtener datos completos del libro
+      let book = attrs.book || attrs.book?.data?.attributes || {};
+      if (attrs.book?.data) {
+        book = { ...attrs.book.data.attributes, id: attrs.book.data.id };
+      } else if (attrs.book) {
+        book = { ...attrs.book, id: attrs.book.id };
+      }
+      // Campus y cantidad según el campus_origen del préstamo
+      const campusOrigen = (attrs.campus_origen || loan.campus_origen || '').toString().trim().toLowerCase();
+      let campus = attrs.campus_origen || loan.campus_origen || '';
+      let cantidad = '';
+      // Buscar inventario correspondiente al campus_origen
+      let inventarios = [];
+      if (book.inventories && Array.isArray(book.inventories)) {
+        inventarios = book.inventories;
+      } else if (book.inventories && book.inventories.data && Array.isArray(book.inventories.data)) {
+        inventarios = book.inventories.data.map((inv: any) => inv.attributes || inv);
+      }
+      if (campusOrigen && inventarios.length > 0) {
+        // Buscar ignorando mayúsculas/minúsculas y espacios
+        const inv = inventarios.find((i: any) => {
+          const campusInv = (i.Campus || i.campus || '').toString().trim().toLowerCase();
+          return campusInv === campusOrigen;
+        });
+        if (inv) {
+          cantidad = inv.Cantidad || inv.cantidad || '';
+        } else {
+          // Si no se encuentra, mostrar la suma total de cantidades
+          const suma = inventarios.reduce((acc: number, i: any) => acc + (parseInt(i.Cantidad || i.cantidad || '0') || 0), 0);
+          cantidad = suma > 0 ? suma : '';
+        }
+      } else if (inventarios.length > 0) {
+        // Si no hay campus_origen, mostrar la suma total
+        const suma = inventarios.reduce((acc: number, i: any) => acc + (parseInt(i.Cantidad || i.cantidad || '0') || 0), 0);
+        cantidad = suma > 0 ? suma : '';
+      }
+      // Usuario
+      const user = attrs.usuario || attrs.usuario?.data?.attributes || {};
+      return {
+        "ID Préstamo": loan.id || attrs.id || '',
+        // Datos del libro
+        "ID Libro": book.id || '',
+        "ID_Libro": book.id_libro || '',
+        "Título": book.titulo || '',
+        "Autor": book.autor || '',
+        "Clasificación": book.clasificacion || '',
+        "Campus": campus,
+        "Cantidad": 1,
+        // Datos del usuario
+        "Usuario": user.username || '',
+        "Num Control": user.Numcontrol || '',
+        "Carrera": user.Carrera || '',
+        // Fechas y estado
+        "Fecha Préstamo": attrs.fecha_prestamo || '',
+        "Fecha Devolución Esperada": attrs.fecha_devolucion_esperada || '',
+        "Estado": attrs.estado || '',
+        "Notas": attrs.notas || ''
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(filas);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "DevolucionesPendientes");
+    const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([excelBuffer], { type: "application/octet-stream" });
+    saveAs(blob, "devoluciones_pendientes.xlsx");
+  } catch (error) {
+    alert("Error al descargar devoluciones pendientes");
+  }
+}
+
+// 5. Top Libros del Semestre
+async function descargarTopLibrosSemestre() {
+  try {
+    const response = await fetchAPI('/api/loans?populate=*');
+    const loans = response.data || [];
+    // Calcular fecha de inicio del semestre (6 meses atrás)
+    const hoy = new Date();
+    const inicioSemestre = new Date(hoy.getFullYear(), hoy.getMonth() - 5, 1);
+    const prestamosSemestre = loans.filter((loan: any) => {
+      const fecha = new Date(loan.fecha_prestamo || loan.attributes?.fecha_prestamo);
+      return fecha >= inicioSemestre && fecha <= hoy;
+    });
+    // Contar préstamos por libro
+    const conteo: Record<string, { titulo: string, autor: string, cantidad: number }> = {};
+    prestamosSemestre.forEach((loan: any) => {
+      const book = loan.book || loan.attributes?.book || {};
+      const titulo = book.titulo || book.data?.attributes?.titulo || 'Sin título';
+      const autor = book.autor || book.data?.attributes?.autor || 'Desconocido';
+      const key = titulo + '|' + autor;
+      if (!conteo[key]) conteo[key] = { titulo, autor, cantidad: 0 };
+      conteo[key].cantidad++;
+    });
+    // Ordenar y tomar top 10
+    const topLibros = Object.values(conteo).sort((a, b) => b.cantidad - a.cantidad).slice(0, 10);
+    const ws = XLSX.utils.json_to_sheet(topLibros);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "TopLibrosSemestre");
+    const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([excelBuffer], { type: "application/octet-stream" });
+    saveAs(blob, "top_libros_semestre.xlsx");
+  } catch (error) {
+    alert("Error al descargar top libros del semestre");
+  }
+}
+
+// 6. Historial de Devoluciones
+async function descargarHistorialDevoluciones() {
+  try {
+    const response = await fetchAPI('/api/loans?populate=*');
+    const loans = response.data || [];
+    // Agrupar devoluciones por mes
+    const historial: Record<string, number> = {};
+    loans.forEach((loan: any) => {
+      const estado = loan.estado || loan.attributes?.estado;
+      if (estado === 'devuelto') {
+        const fecha = new Date(loan.fecha_devolucion_real || loan.attributes?.fecha_devolucion_real);
+        const mes = fecha.toLocaleString('es-MX', { month: 'long', year: 'numeric' });
+        historial[mes] = (historial[mes] || 0) + 1;
+      }
+    });
+    const filas = Object.entries(historial).map(([mes, cantidad]) => ({
+      "Mes": mes,
+      "Devoluciones": cantidad
+    }));
+    const ws = XLSX.utils.json_to_sheet(filas);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "HistorialDevoluciones");
+    const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([excelBuffer], { type: "application/octet-stream" });
+    saveAs(blob, "historial_devoluciones.xlsx");
+  } catch (error) {
+    alert("Error al descargar historial de devoluciones");
+  }
+}
+
 export default function ReportesPage() {
   // Todos los hooks primero en un orden consistente
   const router = useRouter();
@@ -309,6 +965,26 @@ export default function ReportesPage() {
   const [selectedUserName, setSelectedUserName] = useState<string | null>(null);
   const [selectedUserLoans, setSelectedUserLoans] = useState<Loan[]>([]);
   const [isLoadingLoans, setIsLoadingLoans] = useState(false);
+  const [showInventarioModal, setShowInventarioModal] = useState(false);
+  const [descargandoInventario, setDescargandoInventario] = useState(false);
+  const [showTasaModal, setShowTasaModal] = useState(false);
+
+  // Calcular los totales para el resumen de la tasa de devolución
+  const [prestamosDevueltos, setPrestamosDevueltos] = useState(0);
+  const [prestamosTotales, setPrestamosTotales] = useState(0);
+
+  useEffect(() => {
+    // Obtener préstamos utilizando loanService
+    const fetchLoans = async () => {
+      try {
+        const loans = await loanService.getLoans();
+        const devueltos = loans.filter(loan => loan.estado === 'devuelto').length;
+        setPrestamosDevueltos(devueltos);
+        setPrestamosTotales(loans.length);
+      } catch {}
+    };
+    fetchLoans();
+  }, []);
 
   // Efecto para verificación de permisos
   useEffect(() => {
@@ -785,6 +1461,14 @@ export default function ReportesPage() {
     setSelectedPrestamoMes(null);
   };
 
+  // Handler para el botón del inventario
+  const handleDescargarInventario = async () => {
+    setShowInventarioModal(false);
+    setDescargandoInventario(true);
+    await descargarInventarioCompleto();
+    setDescargandoInventario(false);
+  };
+
   // Renderizado condicional DESPUÉS de todos los hooks
   if (userLoading || !permissions) {
     return (
@@ -813,8 +1497,16 @@ export default function ReportesPage() {
           <DateRangePicker />
           
           <div className="flex items-center gap-2">
-            <ReportFilters />
-            <ReportExport />
+            <Button onClick={descargarConsultasCSV} variant="outline">
+              Descargar Consultas (CSV)
+            </Button>
+            <Button onClick={descargarConsultasExcel} variant="outline">
+              Descargar Consultas (Excel)
+            </Button>
+            <Button onClick={generarInformeOficial} variant="outline" className="bg-black text-white hover:bg-neutral-900">
+              <FileText className="mr-2 h-4 w-4" />
+              Generar Informe Oficial
+            </Button>
           </div>
         </div>
       </div>
@@ -890,7 +1582,7 @@ export default function ReportesPage() {
         </GlowCard>
         
         <GlowCard
-          onClick={() => router.push('/prestamos?estado=devuelto')}
+          onClick={() => setShowTasaModal(true)}
           tabIndex={0}
           role="button"
           aria-label="Ver préstamos devueltos"
@@ -913,10 +1605,44 @@ export default function ReportesPage() {
         </GlowCard>
       </div>
 
+      {/* Modal de resumen de tasa de devolución */}
+      <Dialog open={showTasaModal} onOpenChange={setShowTasaModal}>
+        <DialogContent className="max-w-md text-center">
+          <DialogHeader>
+            <div className="flex flex-col items-center gap-2">
+              <BarChart className="h-10 w-10 text-green-500 mb-2" />
+              <DialogTitle className="text-2xl font-bold">Tasa de Devolución</DialogTitle>
+              <DialogDescription>
+                Porcentaje de préstamos devueltos respecto al total de préstamos.
+              </DialogDescription>
+            </div>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className={`text-4xl font-extrabold ${tasaDevolucionStats.porcentaje >= 70 ? 'text-green-500' : 'text-amber-500'}`}> 
+              {tasaDevolucionStats.porcentaje}%
+            </div>
+            <div className="flex justify-center gap-6">
+              <div>
+                <div className="text-xs text-muted-foreground">Devueltos</div>
+                <div className="font-semibold">{prestamosDevueltos}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Totales</div>
+                <div className="font-semibold">{prestamosTotales}</div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" className="w-full" onClick={() => setShowTasaModal(false)}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Tabs defaultValue="stats" className="w-full">
-        <TabsList className="grid w-full md:w-auto grid-cols-3 mb-4">
+        <TabsList className="grid w-full md:w-auto grid-cols-2 mb-4">
           <TabsTrigger value="stats">Estadísticas</TabsTrigger>
-          <TabsTrigger value="books">Libros</TabsTrigger>
           <TabsTrigger value="users">Usuarios</TabsTrigger>
         </TabsList>
         
@@ -1090,113 +1816,6 @@ export default function ReportesPage() {
           </div>
         </TabsContent>
         
-        <TabsContent value="books" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card className="col-span-1">
-              <CardHeader>
-                <CardTitle>Distribución por Categoría</CardTitle>
-                <CardDescription>
-                  Distribución de libros por categoría
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RechartsPieChart>
-                      <Pie
-                        data={categoryData}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        outerRadius={100}
-                        fill="#8884d8"
-                        dataKey="value"
-                        nameKey="name"
-                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                      >
-                        {categoryData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "hsl(var(--card))",
-                          borderColor: "hsl(var(--border))",
-                          borderRadius: "var(--radius)",
-                        }}
-                        labelStyle={{
-                          color: "hsl(var(--card-foreground))",
-                        }}
-                      />
-                    </RechartsPieChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-              <CardFooter className="flex justify-end">
-                <Button variant="outline" size="sm">
-                  <Download className="mr-2 h-4 w-4" />
-                  Exportar
-                </Button>
-              </CardFooter>
-            </Card>
-            
-            <Card className="col-span-1">
-              <CardHeader>
-                <CardTitle>Libros Más Populares</CardTitle>
-                <CardDescription>
-                  Ranking de libros más prestados
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RechartsBarChart
-                      layout="vertical"
-                      data={popularBooksData}
-                      margin={{
-                        top: 5,
-                        right: 20,
-                        left: 0,
-                        bottom: 0,
-                      }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                      <XAxis type="number" className="text-xs" stroke="hsl(var(--muted-foreground))" />
-                      <YAxis dataKey="name" type="category" width={100} className="text-xs" stroke="hsl(var(--muted-foreground))" />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "hsl(var(--card))",
-                          borderColor: "hsl(var(--border))",
-                          borderRadius: "var(--radius)",
-                        }}
-                        labelStyle={{
-                          color: "hsl(var(--card-foreground))",
-                        }}
-                      />
-                      <Legend />
-                      <Bar 
-                        dataKey="value" 
-                        name="Cantidad de Préstamos" 
-                        radius={[0, 4, 4, 0]} 
-                      >
-                        {popularBooksData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={index % 2 === 0 ? '#2563EB' : '#5EA4F5'} />
-                        ))}
-                      </Bar>
-                    </RechartsBarChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-              <CardFooter className="flex justify-end">
-                <Button variant="outline" size="sm">
-                  <Download className="mr-2 h-4 w-4" />
-                  Exportar
-                </Button>
-              </CardFooter>
-            </Card>
-          </div>
-        </TabsContent>
-        
         <TabsContent value="users" className="space-y-4">
           <Card>
             <CardHeader>
@@ -1315,12 +1934,12 @@ export default function ReportesPage() {
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {[
-              { title: "Inventario Completo", description: "Lista completa de todos los libros en el sistema", icon: <FileText className="h-5 w-5" />, color: "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400" },
-              { title: "Préstamos Mensuales", description: "Reporte de préstamos del mes actual", icon: <FileBarChart className="h-5 w-5" />, color: "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400" },
-              { title: "Usuarios por Carrera", description: "Distribución de usuarios por carrera", icon: <PieChart className="h-5 w-5" />, color: "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400" },
-              { title: "Devoluciones Pendientes", description: "Préstamos con devolución pendiente", icon: <FileText className="h-5 w-5" />, color: "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400" },
-              { title: "Top Libros del Semestre", description: "Libros más prestados este semestre", icon: <BarChart className="h-5 w-5" />, color: "bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400" },
-              { title: "Historial de Devoluciones", description: "Histórico de devoluciones por mes", icon: <LineChart className="h-5 w-5" />, color: "bg-cyan-100 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400" },
+              { title: "Inventario Completo", description: "Lista completa de todos los libros en el sistema", icon: <FileText className="h-5 w-5" />, color: "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400", onClick: () => setShowInventarioModal(true) },
+              { title: "Préstamos Mensuales", description: "Reporte de préstamos del mes actual", icon: <FileBarChart className="h-5 w-5" />, color: "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400", onClick: descargarPrestamosMensuales },
+              { title: "Usuarios por Carrera", description: "Distribución de usuarios por carrera", icon: <PieChart className="h-5 w-5" />, color: "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400", onClick: descargarUsuariosPorCarrera },
+              { title: "Devoluciones Pendientes", description: "Préstamos con devolución pendiente", icon: <FileText className="h-5 w-5" />, color: "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400", onClick: descargarDevolucionesPendientes },
+              { title: "Top Libros del Semestre", description: "Libros más prestados este semestre", icon: <BarChart className="h-5 w-5" />, color: "bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400", onClick: descargarTopLibrosSemestre },
+              { title: "Historial de Devoluciones", description: "Histórico de devoluciones por mes", icon: <LineChart className="h-5 w-5" />, color: "bg-cyan-100 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400", onClick: descargarHistorialDevoluciones },
             ].map((report, i) => (
               <div key={i} className="flex flex-col border rounded-lg overflow-hidden transition-all hover:shadow-md">
                 <div className="p-4 flex items-start gap-4">
@@ -1333,9 +1952,9 @@ export default function ReportesPage() {
                   </div>
                 </div>
                 <div className="mt-auto p-4 pt-0 flex justify-end">
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" onClick={report.onClick} disabled={descargandoInventario && i === 0}>
                     <Download className="mr-2 h-4 w-4" />
-                    Descargar
+                    {descargandoInventario && i === 0 ? "Descargando..." : "Descargar"}
                   </Button>
                 </div>
               </div>

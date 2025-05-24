@@ -14,7 +14,7 @@ const axiosInstance = axios.create({
 // Interceptor para incluir el token JWT en cada solicitud
 axiosInstance.interceptors.request.use((config) => {
   // Si hay un token en localStorage, añadirlo a las cabeceras
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const token = typeof window !== 'undefined' ? localStorage.getItem('bibliotech-token') : null;
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -76,7 +76,7 @@ export const apiService = {
       
       // Guardar token JWT en localStorage
       if (response.jwt) {
-        localStorage.setItem('token', response.jwt);
+        localStorage.setItem('bibliotech-token', response.jwt);
       }
       
       return response;
@@ -88,6 +88,6 @@ export const apiService = {
 
   // Método para cerrar sesión
   logout() {
-    localStorage.removeItem('token');
+    localStorage.removeItem('bibliotech-token');
   },
 }; 

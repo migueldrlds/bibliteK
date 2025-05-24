@@ -96,19 +96,9 @@ interface BookResponse {
 
 export const bookService = {
   // Obtener todos los libros
-  getBooks: async (filters = {}): Promise<BookResponse> => {
+  getBooks: async (filters = {}, forceRefresh = false): Promise<BookResponse> => {
     try {
       console.log("Solicitando lista de libros con filtros:", filters);
-      
-      // Generar clave única para caché basada en los filtros
-      const cacheKey = `books-${JSON.stringify(filters)}`;
-      
-      // Intentar obtener datos de la caché
-      const cachedData = cacheService.getItem(cacheKey);
-      if (cachedData) {
-        console.log("Usando datos en caché para libros");
-        return cachedData;
-      }
       
       // Si no hay datos en caché, realizar petición a la API
       // Construir URL de consulta con filtros
@@ -170,9 +160,6 @@ export const bookService = {
           result.data = [mappedBook];
         }
       }
-
-      // Guardar en caché para futuras solicitudes
-      cacheService.setItem(cacheKey, result);
       
       return result;
     } catch (error) {
@@ -670,7 +657,7 @@ export const bookService = {
         console.log(`Se encontraron ${inventories.length} inventarios para campus ${campus} y libro ${book.titulo}`);
         
         // Log detallado de cada inventario
-        inventories.forEach((inv: { id: number; documentId: string | null; Campus: string; Cantidad: number }, index: number) => {
+        inventories.forEach((inv, index) => {
           console.log(`\nInventario #${index + 1}:`);
           console.log("ID:", inv.id);
           console.log("DocumentID:", inv.documentId);
@@ -678,44 +665,31 @@ export const bookService = {
           console.log("Cantidad:", inv.Cantidad);
         });
         
-        // Si hay inventarios existentes, buscar uno con documentId
+        // Si hay inventarios existentes, actualizar el primero (aunque su cantidad sea 0)
         if (inventories.length > 0) {
-          // Primero intentar encontrar un inventario con documentId y cantidad > 0
-          const inventoryWithDocId = inventories.find((inv: { documentId?: string; Cantidad: number }) => 
-            inv.documentId && inv.Cantidad > 0
-          );
+          const inventoryToUpdate = inventories[0];
+          const inventoryDocId = inventoryToUpdate.documentId || inventoryToUpdate.id;
+          const currentQuantity = inventoryToUpdate.Cantidad || 0;
+          const newQuantity = Math.max(0, currentQuantity + quantityChange);
           
-          if (inventoryWithDocId) {
-            console.log("Usando inventario con documentId:", inventoryWithDocId.documentId);
-            const currentQuantity = inventoryWithDocId.Cantidad || 0;
-            const newQuantity = Math.max(0, currentQuantity + quantityChange);
+          console.log(`Actualizando inventario existente (ID: ${inventoryDocId}) de cantidad ${currentQuantity} a ${newQuantity}`);
+          try {
+            const updateResponse = await fetchAPI(`/api/inventories/${inventoryDocId}`, {
+              method: 'PUT',
+              body: JSON.stringify({
+                data: {
+                  Cantidad: newQuantity,
+                  book: book.documentId // Asegurarnos de que el libro esté asociado
+                }
+              }),
+            });
             
-            console.log(`Actualizando inventario con documentId: ${inventoryWithDocId.documentId}`);
-            console.log(`Cantidad actual: ${currentQuantity}, Nueva cantidad: ${newQuantity}`);
-            
-            try {
-              const updateResponse = await fetchAPI(`/api/inventories/${inventoryWithDocId.documentId}`, {
-                method: 'PUT',
-                body: JSON.stringify({
-                  data: {
-                    Cantidad: newQuantity,
-                    book: book.documentId // Asegurarnos de que el libro esté asociado
-                  }
-                }),
-              });
-              
-              console.log("Inventario actualizado con éxito:", updateResponse);
-              console.log("=== FIN DE ACTUALIZACIÓN DE INVENTARIO ===");
-              
-              return updateResponse;
-            } catch (updateError) {
-              console.error(`Error al actualizar inventario con documentId ${inventoryWithDocId.documentId}:`, updateError);
-              throw new Error(`Error al actualizar inventario: ${updateError instanceof Error ? updateError.message : String(updateError)}`);
-            }
-          } else {
-            // Si no hay inventario con documentId y cantidad > 0, crear uno nuevo
-            console.log("No se encontró inventario con documentId y cantidad > 0, creando uno nuevo");
-            return await bookService.createNewInventory(book, campus, quantityChange);
+            console.log("Inventario actualizado con éxito:", updateResponse);
+            console.log("=== FIN DE ACTUALIZACIÓN DE INVENTARIO ===");
+            return updateResponse;
+          } catch (updateError) {
+            console.error(`Error al actualizar inventario con ID ${inventoryDocId}:`, updateError);
+            throw new Error(`Error al actualizar inventario: ${updateError instanceof Error ? updateError.message : String(updateError)}`);
           }
         }
       }

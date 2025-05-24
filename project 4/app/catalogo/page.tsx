@@ -108,6 +108,7 @@ import { useUser } from "@/context/user-context";
 import { useRouter } from "next/navigation";
 import React from "react";
 import { useToast } from "@/hooks/use-toast";
+import fetchAPI from "@/lib/api";
 
 // Schema for book form validation
 const bookSchema = z.object({
@@ -160,17 +161,6 @@ const books = [
   },
 ];
 
-// Categories for the select input
-const categories = [
-  "Informática",
-  "Matemáticas",
-  "Física",
-  "Química",
-  "Ingeniería",
-  "Literatura",
-  "Historia",
-];
-
 // Sistema de clasificación LCC
 const lccCategories = [
   { value: "A", label: "A - Generalidades" },
@@ -199,8 +189,7 @@ const lccCategories = [
 // Campuses for the select input
 const campuses = [
   "Tomas Aquino",
-  "Otay",
-  "Unidad Tijuana",
+  "Otay"
 ];
 
 // Definir la interfaz para un ítem de inventario
@@ -233,7 +222,6 @@ function CatalogoContent() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalBooks, setTotalBooks] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedLCC, setSelectedLCC] = useState("");
   const [selectedCampus, setSelectedCampus] = useState("");
   const [bookCovers, setBookCovers] = useState<Record<string, string>>({});
@@ -243,57 +231,14 @@ function CatalogoContent() {
   const router = useRouter();
   const { toast } = useToast();
   
-  // Definir la función fetchBooks aquí, antes de usarla en useEffect
-  const fetchBooks = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      // Construir filtros para búsqueda
-      const filters: any = {
-        'pagination[page]': currentPage,
-        'pagination[pageSize]': 20,
-      };
-
-      // Filtros de búsqueda
-      if (searchTerm) {
-        filters['filters[$or][0][titulo][$containsi]'] = searchTerm;
-        filters['filters[$or][1][autor][$containsi]'] = searchTerm;
-        filters['filters[$or][2][id_libro][$containsi]'] = searchTerm;
-      }
-
-      // Filtros de categoría
-      if (selectedCategory && selectedCategory !== "all") {
-        filters['filters[clasificacion][$containsi]'] = selectedCategory;
-      }
-
-      // Filtros de clasificación LCC (primera letra)
-      if (selectedLCC && selectedLCC !== "all") {
-        filters['filters[clasificacion][$startsWith]'] = selectedLCC;
-      }
-
-      // Filtros de campus
-      if (selectedCampus && selectedCampus !== "all") {
-        filters['filters[inventory][Campus][$eq]'] = selectedCampus;
-      }
-
-      const response = await bookService.getBooks(filters);
-      
-      if (response && response.data) {
-        setApiBooks(response.data);
-        setTotalBooks(response.meta?.pagination?.total || response.data.length);
-      }
-    } catch (err) {
-      console.error("Error al cargar libros:", err);
-      setError("No se pudieron cargar los libros. Por favor, intenta de nuevo más tarde.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   // Agregamos un debounce para la búsqueda
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(searchTerm);
-  
+
+  // Reiniciar la paginación a 1 cuando cambie algún filtro
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedLCC, selectedCampus, searchTerm]);
+
   // Use effect para gestionar el debounce de la búsqueda
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -315,7 +260,7 @@ function CatalogoContent() {
     if (!loading && permissions?.canAccessCatalogo) {
       fetchBooks();
     }
-  }, [currentPage, debouncedSearchTerm, selectedCategory, selectedLCC, selectedCampus, loading, permissions]);
+  }, [currentPage, debouncedSearchTerm, selectedLCC, selectedCampus, loading, permissions]);
   
   // Efecto para cargar las portadas de los libros
   useEffect(() => {
@@ -366,21 +311,6 @@ function CatalogoContent() {
     fetchBookCovers();
   }, [apiBooks, bookCovers]);
 
-  // Form for adding/editing books
-  const form = useForm<z.infer<typeof bookSchema>>({
-    resolver: zodResolver(bookSchema),
-    defaultValues: {
-      id_libro: `LIB-${new Date().getFullYear()}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`,
-      titulo: "",
-      autor: "",
-      clasificacion: "",
-      inventory: {
-        tomasAquino: 0,
-        otay: 0
-      }
-    },
-  });
-
   // Transformar API books al formato que espera la UI
   const transformedBooks = apiBooks.map(book => {
     // Obtener los inventarios del libro (puede estar en múltiples campus)
@@ -398,7 +328,6 @@ function CatalogoContent() {
     // Agrupar inventarios por campus para evitar duplicados y sumar cantidades
     const groupedInventories = inventories.reduce((grouped, inv) => {
       if (!inv || !inv.Campus) return grouped;
-      
       const campus = inv.Campus;
       if (!grouped[campus]) {
         grouped[campus] = {
@@ -415,7 +344,7 @@ function CatalogoContent() {
       return grouped;
     }, {} as Record<string, Inventory>);
     
-    // Convertir el objeto agrupado de vuelta a un array
+    // Convertir el objeto agrupado de vuelta a un array (solo uno por campus)
     const uniqueInventories = Object.values(groupedInventories);
     
     // Calcular disponibilidad total sumando las cantidades de todos los inventarios agrupados
@@ -455,6 +384,21 @@ function CatalogoContent() {
       inventories: uniqueInventories, // Usamos los inventarios agrupados
       loanHistory: []
     };
+  });
+
+  // Hook de formulario (debe ir aquí antes de cualquier uso de 'form')
+  const form = useForm<z.infer<typeof bookSchema>>({
+    resolver: zodResolver(bookSchema),
+    defaultValues: {
+      id_libro: (Math.floor(Math.random() * 90000) + 10000).toString(),
+      titulo: "",
+      autor: "",
+      clasificacion: "",
+      inventory: {
+        tomasAquino: 0,
+        otay: 0
+      }
+    },
   });
 
   // Handle form submission
@@ -522,7 +466,7 @@ function CatalogoContent() {
       }
       
       // Refrescar la lista de libros
-      fetchBooks();
+      await fetchBooks(true);
       
       // Cerrar diálogos
       setIsAddDialogOpen(false);
@@ -576,7 +520,7 @@ function CatalogoContent() {
       try {
         await bookService.deleteBook(selectedBook.id);
         // Refrescar la lista después de eliminar
-        fetchBooks();
+        await fetchBooks(true);
         setDeleteConfirmOpen(false);
       } catch (error) {
         console.error("Error al eliminar libro:", error);
@@ -609,11 +553,69 @@ function CatalogoContent() {
     }
   };
   
+  // Función para registrar una consulta al seleccionar un libro
+  async function registrarConsultaLibro(bookId: string, userId: number | string | undefined) {
+    try {
+      // Buscar el libro en apiBooks para obtener el ID numérico real
+      const libro = apiBooks.find(b => b.id_libro === bookId);
+      if (!libro) {
+        console.error('No se encontró el libro para registrar la consulta');
+        return;
+      }
+      const realBookId = libro.id; // Este es el ID numérico que Strapi espera
+
+      // Obtener el usuario autenticado de localStorage y asegurar que sea numérico
+      let realUserId: number | undefined = undefined;
+      const userStr = localStorage.getItem('bibliotech-user');
+      if (userStr) {
+        try {
+          const user = JSON.parse(userStr);
+          if (typeof user.id === 'number') realUserId = user.id;
+          else if (typeof user.id === 'string' && !isNaN(Number(user.id))) realUserId = Number(user.id);
+        } catch {}
+      }
+
+      const payload: any = {
+        data: {
+          book: realBookId,
+          fecha: new Date().toISOString(),
+          user_agent: navigator.userAgent
+        }
+      };
+      if (realUserId !== undefined) payload.data.user = realUserId;
+
+      // Agregar el token de autenticación
+      const token = localStorage.getItem('bibliotech-token');
+      console.log('Payload enviado:', payload);
+      await fetchAPI('/api/consultas', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      console.log('Consulta registrada correctamente');
+    } catch (error) {
+      console.error('Error al registrar consulta:', error);
+    }
+  }
+
   // Actualizar para cargar préstamos cuando se abre el modal de detalles
   function handleShowDetails(book: typeof books[0]) {
+    // Registrar la consulta antes de mostrar el modal
+    const userStr = localStorage.getItem('bibliotech-user');
+    let userId: number | string | undefined = undefined;
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        userId = user.id || user._id;
+      } catch {}
+    }
+    registrarConsultaLibro(book.id, userId);
+
     setSelectedBook(book);
     setIsDetailsDialogOpen(true);
-    
     // Cargar historial de préstamos
     loadLoanHistory(book.id);
   }
@@ -809,6 +811,83 @@ function CatalogoContent() {
     );
   };
 
+  // Definir la función fetchBooks aquí, antes de usarla en useEffect
+  const fetchBooks = async (forceRefresh = false) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Construir filtros para búsqueda
+      const filters: any = {
+        'pagination[page]': currentPage,
+        'pagination[pageSize]': 20,
+      };
+
+      // Filtros de búsqueda
+      if (searchTerm) {
+        filters['filters[$or][0][titulo][$containsi]'] = searchTerm;
+        filters['filters[$or][1][autor][$containsi]'] = searchTerm;
+        filters['filters[$or][2][id_libro][$containsi]'] = searchTerm;
+      }
+
+      // Filtros de clasificación LCC (primera letra)
+      if (selectedLCC && selectedLCC !== "all") {
+        filters['filters[clasificacion][$startsWith]'] = selectedLCC;
+      }
+
+      // Filtros de campus
+      if (selectedCampus && selectedCampus !== "all") {
+        filters['filters[inventories][Campus][$eq]'] = selectedCampus;
+      }
+
+      // Forzar la recarga si se solicita
+      if (forceRefresh) {
+        filters['_t'] = new Date().getTime(); // Agregar timestamp para evitar caché
+      }
+
+      const response = await bookService.getBooks(filters, forceRefresh);
+      
+      if (response && response.data) {
+        setApiBooks(response.data);
+        console.log('Libros recibidos desde la API:', response.data);
+        setTotalBooks(response.meta?.pagination?.total || response.data.length);
+      }
+    } catch (err) {
+      console.error("Error al cargar libros:", err);
+      setError("No se pudieron cargar los libros. Por favor, intenta de nuevo más tarde.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Agregar un efecto para escuchar cambios en el estado de préstamos
+  useEffect(() => {
+    const checkForUpdates = async () => {
+      try {
+        // Verificar si hay préstamos recientes
+        const loans = await loanService.getLoans();
+        const recentLoans = loans.filter(loan => {
+          const loanDate = new Date(loan.updatedAt);
+          const now = new Date();
+          const diffTime = Math.abs(now.getTime() - loanDate.getTime());
+          const diffMinutes = Math.ceil(diffTime / (1000 * 60));
+          return diffMinutes <= 5; // Considerar préstamos actualizados en los últimos 5 minutos
+        });
+
+        if (recentLoans.length > 0) {
+          // Si hay préstamos recientes, forzar la recarga de libros
+          await fetchBooks(true);
+        }
+      } catch (error) {
+        console.error("Error al verificar actualizaciones:", error);
+      }
+    };
+
+    // Verificar actualizaciones cada minuto
+    const interval = setInterval(checkForUpdates, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
   // LUEGO las verificaciones y retornos condicionales
   if (loading || (isAuthenticated && !permissions)) {
     return (
@@ -853,26 +932,6 @@ function CatalogoContent() {
           <DropdownMenuContent align="end" className="w-60">
             <div className="p-2 space-y-4">
               <div className="space-y-2">
-                <h4 className="font-medium text-sm">Categoría</h4>
-                <Select 
-                  value={selectedCategory} 
-                  onValueChange={setSelectedCategory}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todas las categorías" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas las categorías</SelectItem>
-                    {categories.map((category) => (
-                      <SelectItem key={category} value={category}>
-                        {category}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="space-y-2">
                 <h4 className="font-medium text-sm">Clasificación LCC</h4>
                 <Select 
                   value={selectedLCC} 
@@ -916,7 +975,6 @@ function CatalogoContent() {
                 size="sm" 
                 className="w-full"
                 onClick={() => {
-                  setSelectedCategory("all");
                   setSelectedLCC("all");
                   setSelectedCampus("all");
                 }}
@@ -970,7 +1028,7 @@ function CatalogoContent() {
         </div>
         <h3 className="mt-4 text-lg font-semibold">Error al cargar libros</h3>
         <p className="mt-2 text-sm text-muted-foreground">{error}</p>
-        <Button className="mt-6" onClick={fetchBooks}>
+        <Button className="mt-6" onClick={() => fetchBooks(true)}>
           Reintentar
         </Button>
       </div>
@@ -985,7 +1043,6 @@ function CatalogoContent() {
         </p>
         <Button className="mt-6" onClick={() => {
           setSearchTerm("");
-          setSelectedCategory("");
           setSelectedCampus("");
         }}>
           Limpiar filtros
@@ -1032,12 +1089,6 @@ function CatalogoContent() {
                 <div className="flex items-center gap-2 text-sm">
                   <BookCopy className="h-4 w-4 text-muted-foreground" />
                   <span className="font-medium">{book.classification}</span>
-                </div>
-                
-                {/* Categoría e ícono */}
-                <div className="flex items-center gap-2 text-sm">
-                  <GraduationCap className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">{book.category}</span>
                 </div>
                 
                 {/* Campus e ícono */}
@@ -1346,7 +1397,12 @@ function CatalogoContent() {
                       <GraduationCap className="h-5 w-5 text-muted-foreground" />
                       <div className="space-y-1">
                         <p className="text-sm text-muted-foreground">Categoría</p>
-                        <p className="font-medium">{selectedBook.category}</p>
+                        <p className="font-medium">{
+                          (() => {
+                            const lccLetter = selectedBook.classification?.trim()?.charAt(0)?.toUpperCase();
+                            return lccCategories.find(cat => cat.value === lccLetter)?.label || "Sin categoría";
+                          })()
+                        }</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">

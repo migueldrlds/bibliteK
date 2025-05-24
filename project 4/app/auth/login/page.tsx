@@ -38,6 +38,8 @@ export default function Login() {
   const { login, loading: authLoading, error: authError, clearError } = useUser();
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [emailUserPart, setEmailUserPart] = useState("");
+  const emailDomain = "@tectijuana.edu.mx";
 
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -116,14 +118,31 @@ export default function Login() {
                     <FormItem>
                       <FormLabel>Correo electrónico institucional</FormLabel>
                       <FormControl>
-                        <div className="relative">
-                          <AtSign className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
+                        <div className="flex h-10 w-full items-center rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+                          <AtSign className="h-5 w-5 text-muted-foreground mr-2 flex-shrink-0" />
                           <Input
-                            placeholder="correo@tectijuana.edu.mx"
-                            className="pl-10"
+                            placeholder="tu.usuario"
+                            className="flex-grow p-0 border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent h-auto"
                             disabled={isLoading || authLoading}
-                            {...field}
+                            value={emailUserPart}
+                            onChange={(e) => {
+                              const rawValue = e.target.value;
+                              let userTypedPart = rawValue;
+                              let fullEmailForValidation = "";
+                              if (rawValue.endsWith(emailDomain)) {
+                                userTypedPart = rawValue.substring(0, rawValue.length - emailDomain.length);
+                                fullEmailForValidation = rawValue;
+                              } else {
+                                userTypedPart = rawValue;
+                                fullEmailForValidation = `${rawValue}${emailDomain}`;
+                              }
+                              setEmailUserPart(userTypedPart);
+                              field.onChange(fullEmailForValidation);
+                            }}
                           />
+                          <span className="text-muted-foreground whitespace-nowrap pl-1 flex-shrink-0">
+                            {emailDomain}
+                          </span>
                         </div>
                       </FormControl>
                       <FormMessage />

@@ -125,12 +125,21 @@ import {
 } from "@tanstack/react-table";
 
 // Interfaz para la UI de usuario con datos adicionales
-interface UIUser extends UserType {
+interface UIUser {
+  id: number;
   fullName: string;
+  apellido?: string;
+  campus?: any; // { id: number; Nombre: string }
   career?: string;
+  careerId?: string;
   gender?: string;
   status: string;
-  Estado?: string; // Campo Estado de la API
+  Estado?: string;
+  Genero?: string;
+  numcontrol?: string;
+  email: string;
+  rol: string;
+  createdAt: string;
   stats: {
     totalLoans: number;
     activeLoans: number;
@@ -204,6 +213,9 @@ export default function UsuariosPage() {
   const [showCreateUserDialog, setShowCreateUserDialog] = useState(false);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [isEditingUser, setIsEditingUser] = useState(false);
+  const [campuses, setCampuses] = useState<any[]>([]);
+  const [careers, setCareers] = useState<any[]>([]);
+  const [selectedEditCareerId, setSelectedEditCareerId] = useState<string>("");
 
   // Configurar el formulario de creación de usuario con React Hook Form
   const form = useForm<CreateUserFormValues>({
@@ -240,6 +252,9 @@ export default function UsuariosPage() {
   // Cargar los datos del usuario seleccionado en el formulario de edición
   useEffect(() => {
     if (selectedUser && showEditDialog) {
+      // Si el usuario tiene carrera, seleccionarla
+      setSelectedEditCareerId(selectedUser.careerId || "");
+      console.log('[DEBUG] Datos de selectedUser al abrir modal de edición:', selectedUser);
       editForm.reset({
         username: selectedUser.fullName || "",
         email: selectedUser.email || "",
@@ -247,12 +262,24 @@ export default function UsuariosPage() {
         rol: selectedUser.rol || "Alumno",
         Estado: selectedUser.status || "Activo",
         Numcontrol: selectedUser.numcontrol?.toString() || "",
-        Genero: selectedUser.gender || "",
-        campus: selectedUser.campus || "",
-        Carrera: selectedUser.career || "",
+        Genero: selectedUser.Genero || "",
+        campus: selectedUser.campus?.id?.toString() || "", // Usar el ID
+        Carrera: selectedUser.careerId || "",  // Usar el ID como string
       });
     }
   }, [selectedUser, showEditDialog, editForm]);
+
+  // Cuando cambia la carrera seleccionada en el modal de edición, actualizar el campus automáticamente
+  useEffect(() => {
+    if (selectedEditCareerId && careers.length > 0) {
+      const selectedCareer = careers.find(c => c.id.toString() === selectedEditCareerId);
+      const campusId = selectedCareer?.campus?.id?.toString() ||
+        selectedCareer?.attributes?.campus?.data?.id?.toString() || "";
+      if (campusId) {
+        editForm.setValue("campus", campusId);
+      }
+    }
+  }, [selectedEditCareerId, careers, editForm]);
 
   // Función para crear un nuevo usuario
   const onCreateUser = async (data: CreateUserFormValues) => {
@@ -299,12 +326,14 @@ export default function UsuariosPage() {
         return {
           ...user,
           fullName: user.username || 'Sin nombre',
+          apellido: user.apellido || '',
+          campus: user.campus || undefined,
           status,
           Estado: user.Estado,
-          // Asegurar que el número de control esté disponible (puede estar en Numcontrol o numcontrol)
           numcontrol: user.Numcontrol || user.numcontrol || '',
           career: user.Carrera || (user.rol === 'Alumno' ? "Ingeniería en Sistemas Computacionales" : undefined),
           gender: user.Genero?.toLowerCase() || (Math.random() > 0.5 ? "masculino" : "femenino"),
+          Genero: user.Genero || '',
           stats: {
             totalLoans: Math.floor(Math.random() * 15),
             activeLoans: Math.floor(Math.random() * 3),
@@ -372,14 +401,24 @@ export default function UsuariosPage() {
           
           return {
             ...user,
+            id: user.id,
             fullName: user.username || 'Sin nombre',
+            apellido: user.apellido || '',
+            campus: user.campus || undefined,
+            careerId: typeof user.carrera === 'object' && user.carrera !== null
+              ? user.carrera.id?.toString() || ''
+              : user.carrera?.toString() || '',
             status,
-            Estado: user.Estado, // Mantener el campo original
-            // Asegurar que el número de control esté disponible (puede estar en Numcontrol o numcontrol)
+            Estado: user.Estado,
             numcontrol: user.Numcontrol || user.numcontrol || '',
-            // Datos ficticios para mantener consistencia con el diseño original
-            career: user.Carrera || (user.rol === 'Alumno' ? "Ingeniería en Sistemas Computacionales" : undefined),
+            email: user.email || '',
+            rol: user.rol || '',
+            createdAt: user.createdAt || '',
+            career: typeof user.carrera === 'object' && user.carrera !== null
+              ? user.carrera.Nombre || ''
+              : '',
             gender: user.Genero?.toLowerCase() || (Math.random() > 0.5 ? "masculino" : "femenino"),
+            Genero: user.Genero || '',
             stats: {
               totalLoans: Math.floor(Math.random() * 15),
               activeLoans: Math.floor(Math.random() * 3),
@@ -406,6 +445,24 @@ export default function UsuariosPage() {
     
     fetchUsers();
   }, [toast, permissions, permissionsLoading]);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const campusRes = await fetch('http://localhost:1337/api/campuses');
+        const campusData = await campusRes.json();
+        setCampuses(campusData.data || campusData); // Soporta ambos formatos
+
+        // Usar populate=campus para que cada carrera tenga el campus anidado
+        const careerRes = await fetch('http://localhost:1337/api/carreras?populate=campus');
+        const careerData = await careerRes.json();
+        setCareers(careerData.data || careerData);
+      } catch (err) {
+        console.error("Error al cargar campus o carreras:", err);
+      }
+    }
+    fetchData();
+  }, []);
 
   // Mostrar loading mientras se cargan los permisos
   if (permissionsLoading) {
@@ -590,10 +647,14 @@ export default function UsuariosPage() {
         return {
           ...user,
           fullName: user.username || 'Sin nombre',
+          apellido: user.apellido || '',
+          campus: user.campus || undefined,
           status,
           Estado: user.Estado,
+          numcontrol: user.Numcontrol || user.numcontrol || '',
           career: user.Carrera || (user.rol === 'Alumno' ? "Ingeniería en Sistemas Computacionales" : undefined),
           gender: user.Genero?.toLowerCase() || (Math.random() > 0.5 ? "masculino" : "femenino"),
+          Genero: user.Genero || '',
           stats: {
             totalLoans: Math.floor(Math.random() * 15),
             activeLoans: Math.floor(Math.random() * 3),
@@ -670,9 +731,12 @@ export default function UsuariosPage() {
               <TableRow>
                 <TableHead>ID</TableHead>
                 <TableHead>Nombre</TableHead>
+                <TableHead>Apellidos</TableHead>
+                <TableHead>Género</TableHead>
                 <TableHead>Número de control</TableHead>
                 <TableHead>Correo electrónico</TableHead>
                 <TableHead>Carrera</TableHead>
+                <TableHead>Campus</TableHead>
                 <TableHead>Rol</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Fecha de registro</TableHead>
@@ -684,9 +748,12 @@ export default function UsuariosPage() {
                 <TableRow key={user.id}>
                   <TableCell className="font-medium">{user.id}</TableCell>
                   <TableCell>{user.fullName}</TableCell>
+                  <TableCell>{user.apellido || '-'}</TableCell>
+                  <TableCell>{user.Genero || '-'}</TableCell>
                   <TableCell>{user.numcontrol || '-'}</TableCell>
                   <TableCell>{user.email}</TableCell>
                   <TableCell>{user.career || "-"}</TableCell>
+                  <TableCell>{user.campus?.Nombre || '-'}</TableCell>
                   <TableCell>{getRoleBadge(user.rol)}</TableCell>
                   <TableCell>{getStatusBadge(user.status)}</TableCell>
                   <TableCell>{formatDate(user.createdAt)}</TableCell>
@@ -949,8 +1016,11 @@ export default function UsuariosPage() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="Tomas Aquino">Tomas Aquino</SelectItem>
-                              <SelectItem value="Otay">Otay</SelectItem>
+                              {campuses.map((campus) => (
+                                <SelectItem key={campus.id} value={campus.id.toString()}>
+                                  {campus.attributes?.Nombre || campus.Nombre}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                           <FormMessage className="text-xs" />
@@ -998,9 +1068,11 @@ export default function UsuariosPage() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="Sistemas">Sistemas</SelectItem>
-                              <SelectItem value="Arquitectura">Arquitectura</SelectItem>
-                              <SelectItem value="Aeronautica">Aeronautica</SelectItem>
+                              {careers.map((career) => (
+                                <SelectItem key={career.id} value={career.id.toString()}>
+                                  {career.attributes?.Nombre || career.Nombre}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                           <FormMessage className="text-xs" />
@@ -1383,36 +1455,27 @@ export default function UsuariosPage() {
                           <FormField
                             control={editForm.control}
                             name="campus"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel className="text-sm">Campus</FormLabel>
-                                <Select
-                                  onValueChange={field.onChange}
-                                  defaultValue={field.value}
-                                >
+                            render={({ field }) => {
+                              // Buscar el campus correspondiente a la carrera seleccionada
+                              const selectedCareer = careers.find(c => c.id.toString() === selectedEditCareerId);
+                              // Replicar lógica de registro: campus anidado
+                              const campusName = selectedCareer?.campus?.Nombre || "Sin unidad";
+                              return (
+                                <FormItem>
+                                  <FormLabel className="text-sm">Campus</FormLabel>
                                   <FormControl>
-                                    <SelectTrigger className="h-9">
-                                      <SelectValue placeholder="Seleccionar campus" />
-                                    </SelectTrigger>
+                                    <Input
+                                      value={campusName}
+                                      disabled
+                                      readOnly
+                                      className="h-9"
+                                      placeholder="El campus se asigna automáticamente"
+                                    />
                                   </FormControl>
-                                  <SelectContent>
-                                    <SelectItem value="Tomas Aquino">
-                                      <div className="flex items-center gap-2">
-                                        <Building className="h-3.5 w-3.5 text-teal-500" />
-                                        <span>Tomas Aquino</span>
-                                      </div>
-                                    </SelectItem>
-                                    <SelectItem value="Otay">
-                                      <div className="flex items-center gap-2">
-                                        <Building className="h-3.5 w-3.5 text-purple-500" />
-                                        <span>Otay</span>
-                                      </div>
-                                    </SelectItem>
-                                  </SelectContent>
-                                </Select>
-                                <FormMessage />
-                              </FormItem>
-                            )}
+                                  <FormMessage />
+                                </FormItem>
+                              );
+                            }}
                           />
 
                           {/* Género */}
@@ -1450,8 +1513,11 @@ export default function UsuariosPage() {
                               <FormItem>
                                 <FormLabel className="text-sm">Carrera</FormLabel>
                                 <Select
-                                  onValueChange={field.onChange}
-                                  defaultValue={field.value}
+                                  onValueChange={(value) => {
+                                    setSelectedEditCareerId(value);
+                                    field.onChange(value);
+                                  }}
+                                  value={selectedEditCareerId}
                                 >
                                   <FormControl>
                                     <SelectTrigger className="h-9">
@@ -1459,9 +1525,11 @@ export default function UsuariosPage() {
                                     </SelectTrigger>
                                   </FormControl>
                                   <SelectContent>
-                                    <SelectItem value="Sistemas">Sistemas</SelectItem>
-                                    <SelectItem value="Arquitectura">Arquitectura</SelectItem>
-                                    <SelectItem value="Aeronautica">Aeronautica</SelectItem>
+                                    {careers.map((career) => (
+                                      <SelectItem key={career.id} value={career.id.toString()}>
+                                        {career.attributes?.Nombre || career.Nombre}
+                                      </SelectItem>
+                                    ))}
                                   </SelectContent>
                                 </Select>
                                 <FormMessage />

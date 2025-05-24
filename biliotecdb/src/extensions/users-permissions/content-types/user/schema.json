@@ -71,27 +71,12 @@
       "target": "api::loan.loan",
       "mappedBy": "usuario"
     },
-    "campus": {
-      "type": "enumeration",
-      "enum": [
-        "Tomas Aquino",
-        "Otay"
-      ]
-    },
     "Genero": {
       "type": "enumeration",
       "enum": [
         "Hombre",
         "Mujer",
         "Otro"
-      ]
-    },
-    "Carrera": {
-      "type": "enumeration",
-      "enum": [
-        "Sistemas",
-        "Arquitectura",
-        "Aeronautica"
       ]
     },
     "Numcontrol": {
@@ -112,6 +97,28 @@
         "Interno",
         "Administrador"
       ],
+      "required": true
+    },
+    "consultas": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::consulta.consulta",
+      "mappedBy": "user"
+    },
+    "carrera": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::carrera.carrera",
+      "inversedBy": "users"
+    },
+    "campus": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::campus.campus",
+      "inversedBy": "users"
+    },
+    "apellido": {
+      "type": "string",
       "required": true
     }
   }

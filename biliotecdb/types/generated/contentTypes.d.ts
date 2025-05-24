@@ -383,6 +383,7 @@ export interface ApiBookBook extends Struct.CollectionTypeSchema {
   attributes: {
     autor: Schema.Attribute.String & Schema.Attribute.Required;
     clasificacion: Schema.Attribute.String;
+    consultas: Schema.Attribute.Relation<'oneToMany', 'api::consulta.consulta'>;
     coverImage: Schema.Attribute.Media<
       'images' | 'files' | 'videos' | 'audios'
     >;
@@ -403,6 +404,108 @@ export interface ApiBookBook extends Struct.CollectionTypeSchema {
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+  };
+}
+
+export interface ApiCampusCampus extends Struct.CollectionTypeSchema {
+  collectionName: 'campuses';
+  info: {
+    displayName: 'Campus';
+    pluralName: 'campuses';
+    singularName: 'campus';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    carreras: Schema.Attribute.Relation<'oneToMany', 'api::carrera.carrera'>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::campus.campus'
+    > &
+      Schema.Attribute.Private;
+    Nombre: Schema.Attribute.String & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    users: Schema.Attribute.Relation<
+      'oneToMany',
+      'plugin::users-permissions.user'
+    >;
+  };
+}
+
+export interface ApiCarreraCarrera extends Struct.CollectionTypeSchema {
+  collectionName: 'carreras';
+  info: {
+    displayName: 'Carrera';
+    pluralName: 'carreras';
+    singularName: 'carrera';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    campus: Schema.Attribute.Relation<'manyToOne', 'api::campus.campus'>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::carrera.carrera'
+    > &
+      Schema.Attribute.Private;
+    Nombre: Schema.Attribute.String & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    users: Schema.Attribute.Relation<
+      'oneToMany',
+      'plugin::users-permissions.user'
+    >;
+  };
+}
+
+export interface ApiConsultaConsulta extends Struct.CollectionTypeSchema {
+  collectionName: 'consultas';
+  info: {
+    description: '';
+    displayName: 'Consulta';
+    pluralName: 'consultas';
+    singularName: 'consulta';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    book: Schema.Attribute.Relation<'manyToOne', 'api::book.book'>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    fecha: Schema.Attribute.DateTime;
+    ip: Schema.Attribute.String;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::consulta.consulta'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    user: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    user_agent: Schema.Attribute.String;
   };
 }
 
@@ -973,13 +1076,13 @@ export interface PluginUsersPermissionsUser
     draftAndPublish: false;
   };
   attributes: {
+    apellido: Schema.Attribute.String & Schema.Attribute.Required;
     blocked: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
-    campus: Schema.Attribute.Enumeration<['Tomas Aquino', 'Otay']>;
-    Carrera: Schema.Attribute.Enumeration<
-      ['Sistemas', 'Arquitectura', 'Aeronautica']
-    >;
+    campus: Schema.Attribute.Relation<'manyToOne', 'api::campus.campus'>;
+    carrera: Schema.Attribute.Relation<'manyToOne', 'api::carrera.carrera'>;
     confirmationToken: Schema.Attribute.String & Schema.Attribute.Private;
     confirmed: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    consultas: Schema.Attribute.Relation<'oneToMany', 'api::consulta.consulta'>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1035,6 +1138,9 @@ declare module '@strapi/strapi' {
       'admin::transfer-token-permission': AdminTransferTokenPermission;
       'admin::user': AdminUser;
       'api::book.book': ApiBookBook;
+      'api::campus.campus': ApiCampusCampus;
+      'api::carrera.carrera': ApiCarreraCarrera;
+      'api::consulta.consulta': ApiConsultaConsulta;
       'api::holiday.holiday': ApiHolidayHoliday;
       'api::inventory.inventory': ApiInventoryInventory;
       'api::loan.loan': ApiLoanLoan;

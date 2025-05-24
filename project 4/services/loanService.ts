@@ -256,7 +256,8 @@ export const loanService = {
           fecha_devolucion_esperada: loanData.fecha_devolucion_esperada,
           estado: loanData.estado,
           campus_origen: loanData.campus_origen,
-          notas: loanData.notas || ''
+          notas: loanData.notas || '',
+          renewalCount: 0 // Siempre inicializar en 0
         }
       };
 
@@ -336,10 +337,20 @@ export const loanService = {
     try {
       console.log(`Renovando préstamo ${documentId ? 'documentId' : 'ID'}: ${id}`);
       
+      // Primero obtener el préstamo actual para conocer su renewalCount
+      const loan = await loanService.getLoan(id, documentId);
+      
+      // Calcular el nuevo valor de renewalCount (incrementarlo en 1)
+      const currentRenewalCount = loan.renewalCount || 0;
+      const newRenewalCount = currentRenewalCount + 1;
+      
+      console.log(`Actualizando renovaciones de ${currentRenewalCount} a ${newRenewalCount}`);
+      
       // Preparar datos para la actualización
       const updateData = {
         fecha_devolucion_esperada: newReturnDate,
-        estado: 'renovado' as 'renovado'
+        estado: 'renovado' as 'renovado',
+        renewalCount: newRenewalCount // Incluir el contador incrementado
       };
       
       // Actualizar el préstamo
@@ -679,5 +690,13 @@ export const loanService = {
       console.error(`Error al sincronizar multa para préstamo ID ${loanId}:`, error);
       throw error;
     }
+  },
+
+  // Función para determinar si un libro es de literatura basado en su clasificación
+  isLiteratureBook: (clasificacion: string | undefined): boolean => {
+    if (!clasificacion) return false;
+    // Un libro es de literatura si su clasificación comienza con P (incluye PA, PQ, etc.)
+    // o contiene explícitamente la palabra "literatura" en cualquier parte de la clasificación
+    return clasificacion.startsWith("P") || clasificacion.toLowerCase().includes("literatura");
   },
 }
