@@ -267,7 +267,7 @@ async function fetchAllConsultas(): Promise<any[]> {
   let todas: any[] = [];
 
   do {
-    const response = await fetchAPI(`/api/consultas?populate=*&pagination[page]=${page}&pagination[pageSize]=${pageSize}`);
+    const response = await fetchAPI(`/api/consultas?populate[0]=book&populate[1]=user&populate[2]=user.carrera&populate[3]=user.campus&pagination[page]=${page}&pagination[pageSize]=${pageSize}`);
     const data = response.data || [];
     if (page === 1) {
       total = response.meta?.pagination?.total || data.length;
@@ -375,39 +375,84 @@ async function descargarConsultasCSV() {
 async function descargarConsultasExcel() {
   try {
     console.log("Iniciando descarga de Excel usando api.ts...");
-    // Usar la función que trae todas las páginas
+    // Usar la función que trae todas las páginas con populate para incluir relaciones
     const consultas = await fetchAllConsultas();
+    
+    // Obtener campus y carreras para referencia
+    const campusRes = await fetch('http://localhost:1337/api/campuses?populate=*');
+    const campusData = await campusRes.json();
+    const campuses = campusData.data || campusData;
+    
+    const careerRes = await fetch('http://localhost:1337/api/carreras?populate=campus');
+    const careerData = await careerRes.json();
+    const careers = careerData.data || careerData;
+
     // Procesar los datos para Excel
     const filas = consultas.map((consulta: any) => {
       // Acceder a book y user que pueden ser null
       const book = consulta.book || {};
       const user = consulta.user || {};
-      // Lógica igual que en usuarios para carrera
+
+      // Lógica mejorada para carrera
       let carrera = "";
       if (user.carrera) {
         if (typeof user.carrera === 'object' && user.carrera !== null) {
-          if (user.carrera.Nombre) {
-            carrera = user.carrera.Nombre;
-          } else if (user.carrera.attributes && user.carrera.attributes.Nombre) {
-            carrera = user.carrera.attributes.Nombre;
-          }
-        } else if (typeof user.carrera === 'string') {
-          carrera = user.carrera;
+          // Intentar obtener el nombre de la carrera de diferentes formas
+          carrera = user.carrera.attributes?.Nombre || 
+                   user.carrera.Nombre || 
+                   user.carrera.data?.attributes?.Nombre ||
+                   user.carrera.data?.Nombre || '';
+        } else if (typeof user.carrera === 'string' || typeof user.carrera === 'number') {
+          // Buscar en la lista de carreras
+          const careerObj = careers.find((c: any) => {
+            const careerId = c.id?.toString() || c.attributes?.id?.toString();
+            return careerId === user.carrera.toString();
+          });
+          carrera = careerObj?.attributes?.Nombre || 
+                   careerObj?.Nombre || 
+                   careerObj?.data?.attributes?.Nombre ||
+                   careerObj?.data?.Nombre || 
+                   user.carrera;
         }
       }
-      // Lógica igual que en usuarios para campus
+
+      // Lógica mejorada para campus
       let campus = "";
       if (user.campus) {
         if (typeof user.campus === 'object' && user.campus !== null) {
-          if (user.campus.Nombre) {
-            campus = user.campus.Nombre;
-          } else if (user.campus.attributes && user.campus.attributes.Nombre) {
-            campus = user.campus.attributes.Nombre;
-          }
-        } else if (typeof user.campus === 'string') {
-          campus = user.campus;
+          // Intentar obtener el nombre del campus de diferentes formas
+          campus = user.campus.attributes?.Nombre || 
+                  user.campus.Nombre || 
+                  user.campus.data?.attributes?.Nombre ||
+                  user.campus.data?.Nombre || '';
+        } else if (typeof user.campus === 'string' || typeof user.campus === 'number') {
+          // Buscar en la lista de campus
+          const campusObj = campuses.find((c: any) => {
+            const campusId = c.id?.toString() || c.attributes?.id?.toString();
+            return campusId === user.campus.toString();
+          });
+          campus = campusObj?.attributes?.Nombre || 
+                  campusObj?.Nombre || 
+                  campusObj?.data?.attributes?.Nombre ||
+                  campusObj?.data?.Nombre || 
+                  user.campus;
         }
       }
+
+      // Si no se encontró campus pero hay carrera, intentar obtener el campus de la carrera
+      if (!campus && carrera) {
+        const careerObj = careers.find((c: any) => {
+          const careerName = c.attributes?.Nombre || c.Nombre || c.data?.attributes?.Nombre || c.data?.Nombre;
+          return careerName === carrera;
+        });
+        if (careerObj?.campus) {
+          campus = careerObj.campus.attributes?.Nombre || 
+                  careerObj.campus.Nombre || 
+                  careerObj.campus.data?.attributes?.Nombre ||
+                  careerObj.campus.data?.Nombre || '';
+        }
+      }
+
       return {
         "ID": consulta.id,
         "DocumentID": consulta.documentId || "",
@@ -436,26 +481,30 @@ async function descargarConsultasExcel() {
         "Apellido": user.apellido || ""
       };
     });
+
     // Crear la hoja de Excel
     const ws = XLSX.utils.json_to_sheet(filas);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Consultas");
+    
     // Ajustar anchos de columna automáticamente
     const colWidths = Object.keys(filas[0] || {}).map(k => 
       Math.max(k.length, ...filas.map((f: any) => String(f[k] || '').length))
     );
     ws['!cols'] = colWidths.map(w => ({ wch: w }));
+    
     // Generar y descargar el archivo
     const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
     const blob = new Blob([excelBuffer], { type: "application/octet-stream" });
     saveAs(blob, "consultas_completas.xlsx");
+    
     // Mensaje de éxito
     console.log("Excel generado exitosamente");
-  } catch (error: any) {
-    console.error("Error en Excel:", error);
-    let errorMessage = "Error al descargar Excel.";
-    if (error?.message) {
-      errorMessage += ` ${error.message}`;
+  } catch (apiError: any) {
+    console.error("Error en la API:", apiError);
+    let errorMessage = "Error al comunicarse con la API.";
+    if (apiError?.message) {
+      errorMessage += ` ${apiError.message}`;
     }
     alert(errorMessage);
   }
