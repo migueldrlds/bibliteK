@@ -146,6 +146,7 @@ interface UIUser {
     overdueLoans: number;
     lastActivity: string;
   };
+  carrera?: any; // <-- Agregado para evitar error de linter
 }
 
 // Definir el esquema de validación para el formulario de creación de usuario
@@ -170,6 +171,7 @@ const createUserSchema = z.object({
 // Schema para editar usuario (sin contraseña obligatoria)
 const editUserSchema = z.object({
   username: z.string().min(3, "El nombre debe tener al menos 3 caracteres"),
+  apellido: z.string().optional(),
   email: z.string().email("Debe ser un correo electrónico válido"),
   password: z.string()
     .refine(val => val === '' || val.length >= 6, {
@@ -238,6 +240,7 @@ export default function UsuariosPage() {
     resolver: zodResolver(editUserSchema),
     defaultValues: {
       username: "",
+      apellido: "",
       email: "",
       password: "",
       rol: "Alumno",
@@ -251,33 +254,56 @@ export default function UsuariosPage() {
 
   // Cargar los datos del usuario seleccionado en el formulario de edición
   useEffect(() => {
-    if (selectedUser && showEditDialog) {
-      // Si el usuario tiene carrera, seleccionarla
-      setSelectedEditCareerId(selectedUser.careerId || "");
-      console.log('[DEBUG] Datos de selectedUser al abrir modal de edición:', selectedUser);
+    if (selectedUser && showEditDialog && careers.length > 0) {
+      // Obtener el ID de la carrera como string
+      let careerId = (selectedUser.carrera?.id ?? selectedUser.careerId ?? "").toString();
+      // Fallback: si el ID no existe en el array de carreras, buscar por nombre
+      if (!careers.some(c => c.id.toString() === careerId)) {
+        const found = careers.find(c => c.Nombre === selectedUser.carrera?.Nombre || c.Nombre === selectedUser.career);
+        if (found) {
+          careerId = found.id.toString();
+        }
+      }
+      setSelectedEditCareerId(careerId);
+      // NOTA: Es importante que los datos de los usuarios estén sincronizados con los IDs reales de las carreras
+
+      // Estado
+      let userStatus = "Activo";
+      if (selectedUser.Estado) {
+        userStatus = selectedUser.Estado;
+      } else if (selectedUser.status) {
+        userStatus = selectedUser.status.charAt(0).toUpperCase() + selectedUser.status.slice(1);
+      }
+
       editForm.reset({
         username: selectedUser.fullName || "",
+        apellido: selectedUser.apellido || "",
         email: selectedUser.email || "",
-        password: "", // Contraseña vacía por defecto
+        password: "",
         rol: selectedUser.rol || "Alumno",
-        Estado: selectedUser.status || "Activo",
+        Estado: userStatus,
         Numcontrol: selectedUser.numcontrol?.toString() || "",
         Genero: selectedUser.Genero || "",
-        campus: selectedUser.campus?.id?.toString() || "", // Usar el ID
-        Carrera: selectedUser.careerId || "",  // Usar el ID como string
+        campus: selectedUser.campus?.id?.toString() || "",
+        Carrera: careerId,
       });
     }
-  }, [selectedUser, showEditDialog, editForm]);
+  }, [selectedUser, showEditDialog, editForm, careers]);
 
   // Cuando cambia la carrera seleccionada en el modal de edición, actualizar el campus automáticamente
   useEffect(() => {
     if (selectedEditCareerId && careers.length > 0) {
-      const selectedCareer = careers.find(c => c.id.toString() === selectedEditCareerId);
-      const campusId = selectedCareer?.campus?.id?.toString() ||
-        selectedCareer?.attributes?.campus?.data?.id?.toString() || "";
-      if (campusId) {
-        editForm.setValue("campus", campusId);
-      }
+      // Buscar la carrera por ID (ambos como string)
+      const selectedCareer = careers.find(
+        c => c.id.toString() === selectedEditCareerId.toString()
+      );
+      const campusId =
+        selectedCareer?.campus?.id?.toString() ||
+        selectedCareer?.attributes?.campus?.data?.id?.toString() ||
+        "";
+
+      // Actualizar el valor de campus en el formulario
+      editForm.setValue("campus", campusId);
     }
   }, [selectedEditCareerId, careers, editForm]);
 
@@ -328,10 +354,16 @@ export default function UsuariosPage() {
           fullName: user.username || 'Sin nombre',
           apellido: user.apellido || '',
           campus: user.campus || undefined,
+          carrera: user.carrera || undefined,
+          careerId: typeof user.carrera === 'object' && user.carrera !== null
+            ? user.carrera.id?.toString() || ''
+            : user.carrera?.toString() || '',
           status,
           Estado: user.Estado,
           numcontrol: user.Numcontrol || user.numcontrol || '',
-          career: user.Carrera || (user.rol === 'Alumno' ? "Ingeniería en Sistemas Computacionales" : undefined),
+          career: typeof user.carrera === 'object' && user.carrera !== null
+            ? user.carrera.Nombre || ''
+            : '',
           gender: user.Genero?.toLowerCase() || (Math.random() > 0.5 ? "masculino" : "femenino"),
           Genero: user.Genero || '',
           stats: {
@@ -405,6 +437,7 @@ export default function UsuariosPage() {
             fullName: user.username || 'Sin nombre',
             apellido: user.apellido || '',
             campus: user.campus || undefined,
+            carrera: user.carrera || undefined,
             careerId: typeof user.carrera === 'object' && user.carrera !== null
               ? user.carrera.id?.toString() || ''
               : user.carrera?.toString() || '',
@@ -503,10 +536,17 @@ export default function UsuariosPage() {
     // Normalizar el término de búsqueda para hacerlo insensible a acentos
     const normalizedSearchTerm = normalizeString(searchTerm);
     
+    // Crear el nombre completo para la búsqueda
+    const fullNameComplete = `${user.fullName} ${user.apellido || ''}`.trim();
+    
     const matchesSearch = 
-      normalizeString(user.fullName).includes(normalizedSearchTerm) ||
+      normalizeString(fullNameComplete).includes(normalizedSearchTerm) ||
       (user.numcontrol && normalizeString(user.numcontrol.toString()).includes(normalizedSearchTerm)) ||
-      normalizeString(user.email).includes(normalizedSearchTerm);
+      normalizeString(user.email).includes(normalizedSearchTerm) ||
+      normalizeString(user.career || '').includes(normalizedSearchTerm) ||
+      normalizeString(user.campus?.Nombre || '').includes(normalizedSearchTerm) ||
+      normalizeString(user.Genero || '').includes(normalizedSearchTerm) ||
+      normalizeString(user.rol || '').includes(normalizedSearchTerm);
 
     // Comparar los roles de manera insensible a mayúsculas/minúsculas
     const matchesRole = 
@@ -612,10 +652,23 @@ export default function UsuariosPage() {
       setIsEditingUser(true);
       console.log("Datos de edición:", data);
 
+      // Mapeo de rol a ID de la colección de roles de Strapi
+      const roleMap = {
+        Alumno: 7,
+        Administrador: 5,
+        Interno: 6,
+      };
+
       // Adaptar los datos al formato esperado por la API
       const userData = {
         ...data,
-        id: selectedUser.id
+        id: selectedUser.id,
+        // Separar el nombre completo en nombre y apellido
+        username: data.username,
+        apellido: data.apellido,
+        rol: data.rol,
+        role: roleMap[data.rol as keyof typeof roleMap], // ID de la colección de roles de Strapi
+        blocked: data.Estado === "Baja", // Bloquear si el estado es Baja
       };
       
       // Solo incluir contraseña si se ha proporcionado una nueva
@@ -629,7 +682,7 @@ export default function UsuariosPage() {
       // Mostrar notificación de éxito
       toast({
         title: "Usuario actualizado",
-        description: `Se ha actualizado el usuario ${data.username} correctamente`,
+        description: `Se ha actualizado el usuario ${data.username} ${data.apellido || ''} correctamente`,
       });
       
       // Actualizar la lista de usuarios
@@ -649,10 +702,19 @@ export default function UsuariosPage() {
           fullName: user.username || 'Sin nombre',
           apellido: user.apellido || '',
           campus: user.campus || undefined,
+          carrera: user.carrera || undefined,
+          careerId: typeof user.carrera === 'object' && user.carrera !== null
+            ? user.carrera.id?.toString() || ''
+            : user.carrera?.toString() || '',
           status,
           Estado: user.Estado,
           numcontrol: user.Numcontrol || user.numcontrol || '',
-          career: user.Carrera || (user.rol === 'Alumno' ? "Ingeniería en Sistemas Computacionales" : undefined),
+          email: user.email || '',
+          rol: user.rol || '',
+          createdAt: user.createdAt || '',
+          career: typeof user.carrera === 'object' && user.carrera !== null
+            ? user.carrera.Nombre || ''
+            : '',
           gender: user.Genero?.toLowerCase() || (Math.random() > 0.5 ? "masculino" : "femenino"),
           Genero: user.Genero || '',
           stats: {
@@ -680,6 +742,10 @@ export default function UsuariosPage() {
       setIsEditingUser(false);
     }
   };
+
+  // Justo antes del renderizado del select de carrera
+  console.log("careers:", careers);
+  console.log("Valor Carrera en form:", editForm.getValues("Carrera"));
 
   return (
     <DashboardLayout>
@@ -730,8 +796,7 @@ export default function UsuariosPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>ID</TableHead>
-                <TableHead>Nombre</TableHead>
-                <TableHead>Apellidos</TableHead>
+                <TableHead>Nombre completo</TableHead>
                 <TableHead>Género</TableHead>
                 <TableHead>Número de control</TableHead>
                 <TableHead>Correo electrónico</TableHead>
@@ -747,8 +812,7 @@ export default function UsuariosPage() {
               {filteredUsers.map((user) => (
                 <TableRow key={user.id}>
                   <TableCell className="font-medium">{user.id}</TableCell>
-                  <TableCell>{user.fullName}</TableCell>
-                  <TableCell>{user.apellido || '-'}</TableCell>
+                  <TableCell>{user.fullName} {user.apellido || ''}</TableCell>
                   <TableCell>{user.Genero || '-'}</TableCell>
                   <TableCell>{user.numcontrol || '-'}</TableCell>
                   <TableCell>{user.email}</TableCell>
@@ -979,7 +1043,7 @@ export default function UsuariosPage() {
                                 </div>
                               </SelectItem>
                               <SelectItem value="Baja">
-                                <div className="flex items-center gap-1">
+                                <div className="flex items-center gap-2">
                                   <Trash2 className="h-3 w-3 text-red-500" />
                                   <span className="text-sm">Baja</span>
                                 </div>
@@ -1132,7 +1196,7 @@ export default function UsuariosPage() {
 
                 <div className="grid gap-6">
                   <div className="space-y-1">
-                    <h3 className="text-xl font-semibold">{selectedUser.fullName}</h3>
+                    <h3 className="text-xl font-semibold">{selectedUser.fullName} {selectedUser.apellido || ''}</h3>
                     <div className="flex items-center gap-2">
                       {getRoleBadge(selectedUser.rol)}
                       {getStatusBadge(selectedUser.status)}
@@ -1153,26 +1217,45 @@ export default function UsuariosPage() {
                     </div>
                   </div>
 
-                  <div>
-                    <p className="text-sm text-muted-foreground">Correo electrónico</p>
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-muted-foreground" />
-                      <p className="font-medium">{selectedUser.email}</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Correo electrónico</p>
+                      <div className="flex items-center gap-2">
+                        <Mail className="h-4 w-4 text-muted-foreground" />
+                        <p className="font-medium">{selectedUser.email}</p>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Género</p>
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-muted-foreground" />
+                        <p className="font-medium">{selectedUser.Genero || 'No especificado'}</p>
+                      </div>
                     </div>
                   </div>
 
-                  {selectedUser.career && (
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm text-muted-foreground">Carrera</p>
                       <div className="flex items-center gap-2">
                         <GraduationCap className="h-4 w-4 text-muted-foreground" />
-                        <p className="font-medium">{selectedUser.career}</p>
+                        <p className="font-medium">{selectedUser.career || 'No especificada'}</p>
                       </div>
                     </div>
-                  )}
+                    <div>
+                      <p className="text-sm text-muted-foreground">Campus</p>
+                      <div className="flex items-center gap-2">
+                        <Building className="h-4 w-4 text-muted-foreground" />
+                        <p className="font-medium">{selectedUser.campus?.Nombre || 'No especificado'}</p>
+                      </div>
+                    </div>
+                  </div>
 
                   <div className="border rounded-lg p-4 bg-muted/50">
-                    <h4 className="font-medium mb-3">Actividad del usuario</h4>
+                    <h4 className="font-medium mb-3 flex items-center gap-2">
+                      <BarChart3 className="h-4 w-4 text-primary" />
+                      Actividad del usuario
+                    </h4>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <p className="text-sm text-muted-foreground">Préstamos totales</p>
@@ -1263,23 +1346,40 @@ export default function UsuariosPage() {
                       </div>
                       
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* Nombre de usuario */}
+                        {/* Nombre */}
                         <FormField
                           control={editForm.control}
                           name="username"
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel className="text-sm flex items-center gap-1">
-                                Nombre completo <span className="text-rose-500">*</span>
+                                Nombre <span className="text-rose-500">*</span>
                               </FormLabel>
                               <FormControl>
-                                <Input placeholder="Nombre completo" {...field} className="h-9" />
+                                <Input placeholder="Nombre" {...field} className="h-9" />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
                           )}
                         />
 
+                        {/* Apellido */}
+                        <FormField
+                          control={editForm.control}
+                          name="apellido"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-sm">Apellido</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Apellido" {...field} className="h-9" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* Número de control */}
                         <FormField
                           control={editForm.control}
@@ -1290,6 +1390,33 @@ export default function UsuariosPage() {
                               <FormControl>
                                 <Input placeholder="Matrícula o ID" {...field} className="h-9" />
                               </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        {/* Género */}
+                        <FormField
+                          control={editForm.control}
+                          name="Genero"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-sm">Género</FormLabel>
+                              <Select
+                                onValueChange={field.onChange}
+                                defaultValue={field.value}
+                              >
+                                <FormControl>
+                                  <SelectTrigger className="h-9">
+                                    <SelectValue placeholder="Seleccionar género" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="Hombre">Hombre</SelectItem>
+                                  <SelectItem value="Mujer">Mujer</SelectItem>
+                                  <SelectItem value="Otro">Otro</SelectItem>
+                                </SelectContent>
+                              </Select>
                               <FormMessage />
                             </FormItem>
                           )}
@@ -1403,7 +1530,7 @@ export default function UsuariosPage() {
                                 <FormLabel className="text-sm">Estado</FormLabel>
                                 <Select
                                   onValueChange={field.onChange}
-                                  defaultValue={field.value}
+                                  value={field.value}
                                 >
                                   <FormControl>
                                     <SelectTrigger className="h-9">
@@ -1450,61 +1577,7 @@ export default function UsuariosPage() {
                           <h3 className="font-medium text-sm">Información Adicional</h3>
                         </div>
                         
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          {/* Campus */}
-                          <FormField
-                            control={editForm.control}
-                            name="campus"
-                            render={({ field }) => {
-                              // Buscar el campus correspondiente a la carrera seleccionada
-                              const selectedCareer = careers.find(c => c.id.toString() === selectedEditCareerId);
-                              // Replicar lógica de registro: campus anidado
-                              const campusName = selectedCareer?.campus?.Nombre || "Sin unidad";
-                              return (
-                                <FormItem>
-                                  <FormLabel className="text-sm">Campus</FormLabel>
-                                  <FormControl>
-                                    <Input
-                                      value={campusName}
-                                      disabled
-                                      readOnly
-                                      className="h-9"
-                                      placeholder="El campus se asigna automáticamente"
-                                    />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              );
-                            }}
-                          />
-
-                          {/* Género */}
-                          <FormField
-                            control={editForm.control}
-                            name="Genero"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel className="text-sm">Género</FormLabel>
-                                <Select
-                                  onValueChange={field.onChange}
-                                  defaultValue={field.value}
-                                >
-                                  <FormControl>
-                                    <SelectTrigger className="h-9">
-                                      <SelectValue placeholder="Seleccionar género" />
-                                    </SelectTrigger>
-                                  </FormControl>
-                                  <SelectContent>
-                                    <SelectItem value="Hombre">Hombre</SelectItem>
-                                    <SelectItem value="Mujer">Mujer</SelectItem>
-                                    <SelectItem value="Otro">Otro</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {/* Carrera */}
                           <FormField
                             control={editForm.control}
@@ -1517,7 +1590,7 @@ export default function UsuariosPage() {
                                     setSelectedEditCareerId(value);
                                     field.onChange(value);
                                   }}
-                                  value={selectedEditCareerId}
+                                  value={field.value || "34"}
                                 >
                                   <FormControl>
                                     <SelectTrigger className="h-9">
@@ -1535,6 +1608,37 @@ export default function UsuariosPage() {
                                 <FormMessage />
                               </FormItem>
                             )}
+                          />
+
+                          {/* Campus (readonly, se actualiza automáticamente) */}
+                          <FormField
+                            control={editForm.control}
+                            name="campus"
+                            render={({ field }) => {
+                              // Buscar el campus de la carrera seleccionada
+                              const selectedCareer = careers.find(
+                                c => c.id.toString() === selectedEditCareerId.toString()
+                              );
+                              const campusName =
+                                selectedCareer?.campus?.Nombre ||
+                                selectedCareer?.attributes?.campus?.data?.attributes?.Nombre ||
+                                "Sin unidad";
+                              return (
+                                <FormItem>
+                                  <FormLabel className="text-sm">Campus</FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      value={campusName}
+                                      disabled
+                                      readOnly
+                                      className="h-9"
+                                      placeholder="El campus se asigna automáticamente"
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              );
+                            }}
                           />
                         </div>
                       </div>

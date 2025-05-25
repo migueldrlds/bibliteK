@@ -725,7 +725,7 @@ async function generarInformeOficial() {
 async function descargarInventarioCompleto() {
   try {
     let page = 1;
-    const pageSize = 1000; // Ajusta según el máximo permitido por Strapi
+    const pageSize = 1000;
     let total = 0;
     let libros: any[] = [];
     do {
@@ -796,23 +796,74 @@ async function descargarPrestamosMensuales() {
       const fecha = new Date(loan.fecha_prestamo || loan.attributes?.fecha_prestamo);
       return fecha >= primerDiaMes && fecha <= ultimoDiaMes;
     });
+
+    // Obtener campus y carreras para referencia
+    const campusRes = await fetch('http://localhost:1337/api/campuses?populate=*');
+    const campusData = await campusRes.json();
+    const campuses = campusData.data || campusData;
+    
+    const careerRes = await fetch('http://localhost:1337/api/carreras?populate=campus');
+    const careerData = await careerRes.json();
+    const careers = careerData.data || careerData;
+
     const filas = prestamosDelMes.map((loan: any) => {
       const attrs = loan.attributes || loan;
       const book = attrs.book?.data?.attributes || attrs.book || {};
       const user = attrs.usuario?.data?.attributes || attrs.usuario || {};
+
+      // Lógica mejorada para carrera
+      let carrera = "";
+      if (user.carrera) {
+        if (typeof user.carrera === 'object' && user.carrera !== null) {
+          carrera = user.carrera.attributes?.Nombre || 
+                   user.carrera.Nombre || 
+                   user.carrera.data?.attributes?.Nombre ||
+                   user.carrera.data?.Nombre || '';
+        } else if (typeof user.carrera === 'string' || typeof user.carrera === 'number') {
+          const careerObj = careers.find((c: any) => {
+            const careerId = c.id?.toString() || c.attributes?.id?.toString();
+            return careerId === user.carrera.toString();
+          });
+          carrera = careerObj?.attributes?.Nombre || 
+                   careerObj?.Nombre || 
+                   careerObj?.data?.attributes?.Nombre ||
+                   careerObj?.data?.Nombre || 
+                   user.carrera;
+        }
+      }
+
+      // Lógica mejorada para campus
+      let campus = "";
+      if (user.campus) {
+        if (typeof user.campus === 'object' && user.campus !== null) {
+          campus = user.campus.attributes?.Nombre || 
+                  user.campus.Nombre || 
+                  user.campus.data?.attributes?.Nombre ||
+                  user.campus.data?.Nombre || '';
+        } else if (typeof user.campus === 'string' || typeof user.campus === 'number') {
+          const campusObj = campuses.find((c: any) => {
+            const campusId = c.id?.toString() || c.attributes?.id?.toString();
+            return campusId === user.campus.toString();
+          });
+          campus = campusObj?.attributes?.Nombre || 
+                  campusObj?.Nombre || 
+                  campusObj?.data?.attributes?.Nombre ||
+                  campusObj?.data?.Nombre || 
+                  user.campus;
+        }
+      }
+
       return {
         "ID Préstamo": loan.id || attrs.id || '',
-        // Datos del libro
         "ID Libro": attrs.book?.data?.id || book.id || '',
-        "ID_Libro": book.id_libro || '',
         "Título": book.titulo || '',
         "Autor": book.autor || '',
         "Clasificación": book.clasificacion || '',
-        // Datos del usuario
         "Usuario": user.username || '',
+        "Apellidos": user.apellido || '',
         "Num Control": user.Numcontrol || '',
-        "Carrera": user.Carrera || '',
-        // Fechas y estado
+        "Carrera": carrera,
+        "Campus": campus,
         "Fecha Préstamo": attrs.fecha_prestamo || '',
         "Fecha Devolución Esperada": attrs.fecha_devolucion_esperada || '',
         "Fecha Devolución Real": attrs.fecha_devolucion_real || '',
@@ -834,20 +885,76 @@ async function descargarPrestamosMensuales() {
 // 3. Usuarios por Carrera
 async function descargarUsuariosPorCarrera() {
   try {
-    const usuarios = await fetchAPI('/api/users');
-    const filas = usuarios.map((user: any) => ({
-      "ID": user.id,
-      "Username": user.username,
-      "Email": user.email,
-      "Num Control": user.Numcontrol || '',
-      "Carrera": user.Carrera || '',
-      "Campus": user.campus || '',
-      "Estado": user.Estado || '',
-      "Rol": user.rol || '',
-      "Creado": user.createdAt || '',
-      "Actualizado": user.updatedAt || '',
-      "Publicado": user.publishedAt || ''
-    }));
+    // Obtener usuarios con sus relaciones
+    const usuarios = await fetchAPI('/api/users?populate[0]=carrera&populate[1]=campus');
+    
+    // Obtener campus y carreras para referencia
+    const campusRes = await fetch('http://localhost:1337/api/campuses?populate=*');
+    const campusData = await campusRes.json();
+    const campuses = campusData.data || campusData;
+    
+    const careerRes = await fetch('http://localhost:1337/api/carreras?populate=campus');
+    const careerData = await careerRes.json();
+    const careers = careerData.data || careerData;
+
+    const filas = usuarios.map((user: any) => {
+      // Lógica mejorada para carrera
+      let carrera = "";
+      if (user.carrera) {
+        if (typeof user.carrera === 'object' && user.carrera !== null) {
+          carrera = user.carrera.attributes?.Nombre || 
+                   user.carrera.Nombre || 
+                   user.carrera.data?.attributes?.Nombre ||
+                   user.carrera.data?.Nombre || '';
+        } else if (typeof user.carrera === 'string' || typeof user.carrera === 'number') {
+          const careerObj = careers.find((c: any) => {
+            const careerId = c.id?.toString() || c.attributes?.id?.toString();
+            return careerId === user.carrera.toString();
+          });
+          carrera = careerObj?.attributes?.Nombre || 
+                   careerObj?.Nombre || 
+                   careerObj?.data?.attributes?.Nombre ||
+                   careerObj?.data?.Nombre || 
+                   user.carrera;
+        }
+      }
+
+      // Lógica mejorada para campus
+      let campus = "";
+      if (user.campus) {
+        if (typeof user.campus === 'object' && user.campus !== null) {
+          campus = user.campus.attributes?.Nombre || 
+                  user.campus.Nombre || 
+                  user.campus.data?.attributes?.Nombre ||
+                  user.campus.data?.Nombre || '';
+        } else if (typeof user.campus === 'string' || typeof user.campus === 'number') {
+          const campusObj = campuses.find((c: any) => {
+            const campusId = c.id?.toString() || c.attributes?.id?.toString();
+            return campusId === user.campus.toString();
+          });
+          campus = campusObj?.attributes?.Nombre || 
+                  campusObj?.Nombre || 
+                  campusObj?.data?.attributes?.Nombre ||
+                  campusObj?.data?.Nombre || 
+                  user.campus;
+        }
+      }
+
+      return {
+        "ID": user.id,
+        "Username": user.username,
+        "Apellidos": user.apellido || '',
+        "Email": user.email,
+        "Num Control": user.Numcontrol || '',
+        "Carrera": carrera,
+        "Campus": campus,
+        "Estado": user.Estado || '',
+        "Rol": user.rol || '',
+        "Creado": user.createdAt || '',
+        "Actualizado": user.updatedAt || '',
+        "Publicado": user.publishedAt || ''
+      };
+    });
     const ws = XLSX.utils.json_to_sheet(filas);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "UsuariosCarrera");
@@ -862,69 +969,83 @@ async function descargarUsuariosPorCarrera() {
 // 4. Devoluciones Pendientes
 async function descargarDevolucionesPendientes() {
   try {
-    const response = await fetchAPI('/api/loans?populate=*');
+    const response = await fetchAPI('/api/loans?populate[0]=book&populate[1]=usuario&populate[2]=usuario.carrera&populate[3]=usuario.campus');
     const loans = response.data || [];
     const pendientes = loans.filter((loan: any) => {
       const estado = loan.estado || loan.attributes?.estado;
       return estado === 'atrasado';
     });
+
+    // Obtener campus y carreras para referencia
+    const campusRes = await fetch('http://localhost:1337/api/campuses?populate=*');
+    const campusData = await campusRes.json();
+    const campuses = campusData.data || campusData;
+    
+    const careerRes = await fetch('http://localhost:1337/api/carreras?populate=campus');
+    const careerData = await careerRes.json();
+    const careers = careerData.data || careerData;
+
     const filas = pendientes.map((loan: any) => {
       const attrs = loan.attributes || loan;
-      // Obtener datos completos del libro
-      let book = attrs.book || attrs.book?.data?.attributes || {};
-      if (attrs.book?.data) {
-        book = { ...attrs.book.data.attributes, id: attrs.book.data.id };
-      } else if (attrs.book) {
-        book = { ...attrs.book, id: attrs.book.id };
-      }
-      // Campus y cantidad según el campus_origen del préstamo
-      const campusOrigen = (attrs.campus_origen || loan.campus_origen || '').toString().trim().toLowerCase();
-      let campus = attrs.campus_origen || loan.campus_origen || '';
-      let cantidad = '';
-      // Buscar inventario correspondiente al campus_origen
-      let inventarios = [];
-      if (book.inventories && Array.isArray(book.inventories)) {
-        inventarios = book.inventories;
-      } else if (book.inventories && book.inventories.data && Array.isArray(book.inventories.data)) {
-        inventarios = book.inventories.data.map((inv: any) => inv.attributes || inv);
-      }
-      if (campusOrigen && inventarios.length > 0) {
-        // Buscar ignorando mayúsculas/minúsculas y espacios
-        const inv = inventarios.find((i: any) => {
-          const campusInv = (i.Campus || i.campus || '').toString().trim().toLowerCase();
-          return campusInv === campusOrigen;
-        });
-        if (inv) {
-          cantidad = inv.Cantidad || inv.cantidad || '';
-        } else {
-          // Si no se encuentra, mostrar la suma total de cantidades
-          const suma = inventarios.reduce((acc: number, i: any) => acc + (parseInt(i.Cantidad || i.cantidad || '0') || 0), 0);
-          cantidad = suma > 0 ? suma : '';
+      const book = attrs.book?.data?.attributes || attrs.book || {};
+      const user = attrs.usuario?.data?.attributes || attrs.usuario || {};
+
+      // Lógica mejorada para carrera
+      let carrera = "";
+      if (user.carrera) {
+        if (typeof user.carrera === 'object' && user.carrera !== null) {
+          carrera = user.carrera.attributes?.Nombre || 
+                   user.carrera.Nombre || 
+                   user.carrera.data?.attributes?.Nombre ||
+                   user.carrera.data?.Nombre || '';
+        } else if (typeof user.carrera === 'string' || typeof user.carrera === 'number') {
+          const careerObj = careers.find((c: any) => {
+            const careerId = c.id?.toString() || c.attributes?.id?.toString();
+            return careerId === user.carrera.toString();
+          });
+          carrera = careerObj?.attributes?.Nombre || 
+                   careerObj?.Nombre || 
+                   careerObj?.data?.attributes?.Nombre ||
+                   careerObj?.data?.Nombre || 
+                   user.carrera;
         }
-      } else if (inventarios.length > 0) {
-        // Si no hay campus_origen, mostrar la suma total
-        const suma = inventarios.reduce((acc: number, i: any) => acc + (parseInt(i.Cantidad || i.cantidad || '0') || 0), 0);
-        cantidad = suma > 0 ? suma : '';
       }
-      // Usuario
-      const user = attrs.usuario || attrs.usuario?.data?.attributes || {};
+
+      // Lógica mejorada para campus
+      let campus = "";
+      if (user.campus) {
+        if (typeof user.campus === 'object' && user.campus !== null) {
+          campus = user.campus.attributes?.Nombre || 
+                  user.campus.Nombre || 
+                  user.campus.data?.attributes?.Nombre ||
+                  user.campus.data?.Nombre || '';
+        } else if (typeof user.campus === 'string' || typeof user.campus === 'number') {
+          const campusObj = campuses.find((c: any) => {
+            const campusId = c.id?.toString() || c.attributes?.id?.toString();
+            return campusId === user.campus.toString();
+          });
+          campus = campusObj?.attributes?.Nombre || 
+                  campusObj?.Nombre || 
+                  campusObj?.data?.attributes?.Nombre ||
+                  campusObj?.data?.Nombre || 
+                  user.campus;
+        }
+      }
+
       return {
         "ID Préstamo": loan.id || attrs.id || '',
-        // Datos del libro
-        "ID Libro": book.id || '',
-        "ID_Libro": book.id_libro || '',
+        "ID Libro": attrs.book?.data?.id || book.id || '',
         "Título": book.titulo || '',
         "Autor": book.autor || '',
         "Clasificación": book.clasificacion || '',
-        "Campus": campus,
-        "Cantidad": 1,
-        // Datos del usuario
         "Usuario": user.username || '',
+        "Apellidos": user.apellido || '',
         "Num Control": user.Numcontrol || '',
-        "Carrera": user.Carrera || '',
-        // Fechas y estado
+        "Carrera": carrera,
+        "Campus": campus,
         "Fecha Préstamo": attrs.fecha_prestamo || '',
         "Fecha Devolución Esperada": attrs.fecha_devolucion_esperada || '',
+        "Fecha Devolución Real": attrs.fecha_devolucion_real || '',
         "Estado": attrs.estado || '',
         "Notas": attrs.notas || ''
       };
@@ -945,28 +1066,45 @@ async function descargarTopLibrosSemestre() {
   try {
     const response = await fetchAPI('/api/loans?populate=*');
     const loans = response.data || [];
-    // Calcular fecha de inicio del semestre (6 meses atrás)
     const hoy = new Date();
-    const inicioSemestre = new Date(hoy.getFullYear(), hoy.getMonth() - 5, 1);
+    const primerDiaSemestre = new Date(hoy.getFullYear(), hoy.getMonth() < 6 ? 0 : 6, 1);
     const prestamosSemestre = loans.filter((loan: any) => {
       const fecha = new Date(loan.fecha_prestamo || loan.attributes?.fecha_prestamo);
-      return fecha >= inicioSemestre && fecha <= hoy;
+      return fecha >= primerDiaSemestre;
     });
+
     // Contar préstamos por libro
-    const conteo: Record<string, { titulo: string, autor: string, cantidad: number }> = {};
+    const prestamosPorLibro = new Map();
     prestamosSemestre.forEach((loan: any) => {
-      const book = loan.book || loan.attributes?.book || {};
-      const titulo = book.titulo || book.data?.attributes?.titulo || 'Sin título';
-      const autor = book.autor || book.data?.attributes?.autor || 'Desconocido';
-      const key = titulo + '|' + autor;
-      if (!conteo[key]) conteo[key] = { titulo, autor, cantidad: 0 };
-      conteo[key].cantidad++;
+      const book = loan.book?.data?.attributes || loan.book || {};
+      const bookId = book.id || loan.book?.data?.id;
+      if (bookId) {
+        const count = prestamosPorLibro.get(bookId) || 0;
+        prestamosPorLibro.set(bookId, count + 1);
+      }
     });
-    // Ordenar y tomar top 10
-    const topLibros = Object.values(conteo).sort((a, b) => b.cantidad - a.cantidad).slice(0, 10);
-    const ws = XLSX.utils.json_to_sheet(topLibros);
+
+    // Convertir a array y ordenar por cantidad de préstamos
+    const librosOrdenados = Array.from(prestamosPorLibro.entries())
+      .map(([bookId, count]) => {
+        const loan = prestamosSemestre.find((l: any) => 
+          (l.book?.data?.id || l.book?.id) === bookId
+        );
+        const book = loan?.book?.data?.attributes || loan?.book || {};
+        return {
+          "ID Libro": bookId,
+          "Título": book.titulo || '',
+          "Autor": book.autor || '',
+          "Clasificación": book.clasificacion || '',
+          "Préstamos": count
+        };
+      })
+      .sort((a, b) => b["Préstamos"] - a["Préstamos"])
+      .slice(0, 50); // Top 50 libros
+
+    const ws = XLSX.utils.json_to_sheet(librosOrdenados);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "TopLibrosSemestre");
+    XLSX.utils.book_append_sheet(wb, ws, "TopLibros");
     const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
     const blob = new Blob([excelBuffer], { type: "application/octet-stream" });
     saveAs(blob, "top_libros_semestre.xlsx");
@@ -978,22 +1116,87 @@ async function descargarTopLibrosSemestre() {
 // 6. Historial de Devoluciones
 async function descargarHistorialDevoluciones() {
   try {
-    const response = await fetchAPI('/api/loans?populate=*');
+    const response = await fetchAPI('/api/loans?populate[0]=book&populate[1]=usuario&populate[2]=usuario.carrera&populate[3]=usuario.campus');
     const loans = response.data || [];
-    // Agrupar devoluciones por mes
-    const historial: Record<string, number> = {};
-    loans.forEach((loan: any) => {
+    const devoluciones = loans.filter((loan: any) => {
       const estado = loan.estado || loan.attributes?.estado;
-      if (estado === 'devuelto') {
-        const fecha = new Date(loan.fecha_devolucion_real || loan.attributes?.fecha_devolucion_real);
-        const mes = fecha.toLocaleString('es-MX', { month: 'long', year: 'numeric' });
-        historial[mes] = (historial[mes] || 0) + 1;
-      }
+      return estado === 'devuelto';
     });
-    const filas = Object.entries(historial).map(([mes, cantidad]) => ({
-      "Mes": mes,
-      "Devoluciones": cantidad
-    }));
+
+    // Obtener campus y carreras para referencia
+    const campusRes = await fetch('http://localhost:1337/api/campuses?populate=*');
+    const campusData = await campusRes.json();
+    const campuses = campusData.data || campusData;
+    
+    const careerRes = await fetch('http://localhost:1337/api/carreras?populate=campus');
+    const careerData = await careerRes.json();
+    const careers = careerData.data || careerData;
+
+    const filas = devoluciones.map((loan: any) => {
+      const attrs = loan.attributes || loan;
+      const book = attrs.book?.data?.attributes || attrs.book || {};
+      const user = attrs.usuario?.data?.attributes || attrs.usuario || {};
+
+      // Lógica mejorada para carrera
+      let carrera = "";
+      if (user.carrera) {
+        if (typeof user.carrera === 'object' && user.carrera !== null) {
+          carrera = user.carrera.attributes?.Nombre || 
+                   user.carrera.Nombre || 
+                   user.carrera.data?.attributes?.Nombre ||
+                   user.carrera.data?.Nombre || '';
+        } else if (typeof user.carrera === 'string' || typeof user.carrera === 'number') {
+          const careerObj = careers.find((c: any) => {
+            const careerId = c.id?.toString() || c.attributes?.id?.toString();
+            return careerId === user.carrera.toString();
+          });
+          carrera = careerObj?.attributes?.Nombre || 
+                   careerObj?.Nombre || 
+                   careerObj?.data?.attributes?.Nombre ||
+                   careerObj?.data?.Nombre || 
+                   user.carrera;
+        }
+      }
+
+      // Lógica mejorada para campus
+      let campus = "";
+      if (user.campus) {
+        if (typeof user.campus === 'object' && user.campus !== null) {
+          campus = user.campus.attributes?.Nombre || 
+                  user.campus.Nombre || 
+                  user.campus.data?.attributes?.Nombre ||
+                  user.campus.data?.Nombre || '';
+        } else if (typeof user.campus === 'string' || typeof user.campus === 'number') {
+          const campusObj = campuses.find((c: any) => {
+            const campusId = c.id?.toString() || c.attributes?.id?.toString();
+            return campusId === user.campus.toString();
+          });
+          campus = campusObj?.attributes?.Nombre || 
+                  campusObj?.Nombre || 
+                  campusObj?.data?.attributes?.Nombre ||
+                  campusObj?.data?.Nombre || 
+                  user.campus;
+        }
+      }
+
+      return {
+        "ID Préstamo": loan.id || attrs.id || '',
+        "ID Libro": attrs.book?.data?.id || book.id || '',
+        "Título": book.titulo || '',
+        "Autor": book.autor || '',
+        "Clasificación": book.clasificacion || '',
+        "Usuario": user.username || '',
+        "Apellidos": user.apellido || '',
+        "Num Control": user.Numcontrol || '',
+        "Carrera": carrera,
+        "Campus": campus,
+        "Fecha Préstamo": attrs.fecha_prestamo || '',
+        "Fecha Devolución Esperada": attrs.fecha_devolucion_esperada || '',
+        "Fecha Devolución Real": attrs.fecha_devolucion_real || '',
+        "Estado": attrs.estado || '',
+        "Notas": attrs.notas || ''
+      };
+    });
     const ws = XLSX.utils.json_to_sheet(filas);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "HistorialDevoluciones");

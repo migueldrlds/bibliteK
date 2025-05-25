@@ -8,7 +8,7 @@ export const authService = {
     try {
       // Usar el endpoint de autenticación de Strapi
       console.log("Llamando a la API en:", '/api/auth/local');
-      const response = await fetchAPI('/api/auth/local', {
+      const response = await fetch('http://localhost:1337/api/auth/local', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -18,41 +18,53 @@ export const authService = {
           password: password
         }),
       });
-      
-      console.log("Respuesta completa de la API:", response);
-      
-      if (!response.jwt) {
+
+      let data;
+      try {
+        data = await response.json();
+      } catch (e) {
+        data = {};
+      }
+
+      if (!response.ok) {
+        console.error("Respuesta de error del backend:", data);
+        throw new Error(data?.error?.message || `Error HTTP: ${response.status}`);
+      }
+
+      console.log("Respuesta completa de la API:", data);
+
+      if (!data.jwt) {
         console.error("No se recibió token JWT en la respuesta");
         throw new Error('Credenciales inválidas');
       }
       
       // Guardar el token y el rol del usuario en localStorage
       // Verificar primero el campo rol, luego el campo role.type como fallback
-      const userRole = response.user.rol || response.user.role?.type || 'authenticated';
+      const userRole = data.user.rol || data.user.role?.type || 'authenticated';
       if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('bibliotech-token', response.jwt);
+        localStorage.setItem('bibliotech-token', data.jwt);
         localStorage.setItem('bibliotech-role', userRole);
         localStorage.setItem('bibliotech-user', JSON.stringify({
-          id: response.user.id,
-          username: response.user.username,
-          email: response.user.email,
+          id: data.user.id,
+          username: data.user.username,
+          email: data.user.email,
           role: userRole,
-          numcontrol: response.user.Numcontrol || '',
-          createdAt: response.user.createdAt
+          numcontrol: data.user.Numcontrol || '',
+          createdAt: data.user.createdAt
         }));
         console.log(`Token, rol y usuario guardados en localStorage: ${userRole}`);
       }
       
       // Retornar el usuario y token directamente desde la respuesta de Strapi
       return {
-        jwt: response.jwt,
+        jwt: data.jwt,
         user: {
-          id: response.user.id,
-          username: response.user.username,
-          email: response.user.email,
+          id: data.user.id,
+          username: data.user.username,
+          email: data.user.email,
           role: userRole,
-          numcontrol: response.user.Numcontrol || '',
-          createdAt: response.user.createdAt
+          numcontrol: data.user.Numcontrol || '',
+          createdAt: data.user.createdAt
         }
       };
     } catch (error: any) {

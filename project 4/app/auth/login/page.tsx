@@ -20,6 +20,14 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { User, AtSign, Lock, ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/context/user-context";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 const loginSchema = z.object({
   email: z
@@ -40,6 +48,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [emailUserPart, setEmailUserPart] = useState("");
   const emailDomain = "@tectijuana.edu.mx";
+  const [showBlockedModal, setShowBlockedModal] = useState(false);
 
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -59,13 +68,21 @@ export default function Login() {
         title: "Inicio de sesión exitoso",
         description: "Bienvenido al sistema BiblioTeK",
       });
-    } catch (error) {
-      console.error("Error en login:", error);
-      toast({
-        title: "Error al iniciar sesión",
-        description: authError || "Verifica tus credenciales e intenta nuevamente",
-        variant: "destructive",
-      });
+    } catch (error: any) {
+      console.error("Error en login:", error, "authError:", authError);
+      if (
+        error?.message?.toLowerCase().includes("blocked") ||
+        authError?.toLowerCase().includes("blocked") ||
+        authError?.toLowerCase().includes("baja")
+      ) {
+        setShowBlockedModal(true);
+      } else {
+        toast({
+          title: "Error al iniciar sesión",
+          description: authError || "Verifica tus credenciales e intenta nuevamente",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -86,6 +103,20 @@ export default function Login() {
       </header>
 
       <main className="flex-1 flex items-center justify-center p-6 pt-24">
+        <Dialog open={showBlockedModal} onOpenChange={setShowBlockedModal}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Acceso denegado</DialogTitle>
+              <DialogDescription>
+                Tu cuenta está <span className="font-semibold text-red-600">dada de baja</span> y no puedes acceder al sistema.<br />
+                Si crees que esto es un error, contacta al administrador.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button onClick={() => setShowBlockedModal(false)} className="w-full">Cerrar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         <div className="w-full max-w-md space-y-8">
           <div className="text-center">
             <Link 
