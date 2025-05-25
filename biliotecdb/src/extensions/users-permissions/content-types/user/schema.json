@@ -80,7 +80,8 @@
       ]
     },
     "Numcontrol": {
-      "type": "string"
+      "type": "string",
+      "unique": true
     },
     "Estado": {
       "type": "enumeration",

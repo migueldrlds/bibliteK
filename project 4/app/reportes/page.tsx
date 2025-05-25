@@ -96,7 +96,7 @@ import fetchAPI from "@/lib/api";
 // Importar useRouter para la navegación
 import { useRouter } from 'next/navigation';
 // Importar para formatear fecha relativa
-import { formatDistanceToNow, parseISO } from "date-fns";
+import { formatDistanceToNow, parseISO, format } from "date-fns";
 import { es } from "date-fns/locale";
 // Importar estilos para el efecto glow
 import "@/styles/glow-card.css";
@@ -120,6 +120,7 @@ interface ApiUser {
   Genero?: string;
   Carrera?: string;
   Estado?: string;
+  apellido?: string;
 }
 
 // Mock data for loan stats
@@ -258,18 +259,32 @@ const getStatusBadge = (status: string) => {
   );
 };
 
+// Función utilitaria para traer todas las consultas de todas las páginas
+async function fetchAllConsultas(): Promise<any[]> {
+  let page = 1;
+  const pageSize = 1000; // Puedes ajustar este número si tienes muchísimos registros
+  let total = 0;
+  let todas: any[] = [];
+
+  do {
+    const response = await fetchAPI(`/api/consultas?populate=*&pagination[page]=${page}&pagination[pageSize]=${pageSize}`);
+    const data = response.data || [];
+    if (page === 1) {
+      total = response.meta?.pagination?.total || data.length;
+    }
+    todas = todas.concat(data);
+    page++;
+  } while (todas.length < total);
+
+  return todas;
+}
+
 // Función para descargar las consultas como CSV
 async function descargarConsultasCSV() {
   try {
     console.log("Iniciando descarga de CSV usando api.ts...");
-    
-    // Usar populate=* que sabemos que funciona según el curl
-    const response = await fetchAPI("/api/consultas?populate=*");
-    console.log("Consultas obtenidas:", response);
-    
-    // Si llegamos aquí, tenemos datos para procesar
-    const consultas = response.data || [];
-    
+    // Usar la función que trae todas las páginas
+    const consultas = await fetchAllConsultas();
     // Procesar los datos a CSV con todos los campos
     const encabezados = [
       "ID", "DocumentID", "Fecha", "IP", "User Agent", 
@@ -278,14 +293,38 @@ async function descargarConsultasCSV() {
       "Libro ID", "ID_Libro", "Título", "Autor", "Clasificación",
       // Datos del usuario según schema.json
       "Usuario ID", "Username", "Email", "Num Control", 
-      "Género", "Carrera", "Campus", "Estado", "Rol"
+      "Género", "Carrera", "Campus", "Estado", "Rol", "Apellido"
     ];
-    
     const filas = consultas.map((consulta: any) => {
       // Acceder a book y user que pueden ser null
       const book = consulta.book || {};
       const user = consulta.user || {};
-      
+      // Lógica igual que en usuarios para carrera
+      let carrera = "";
+      if (user.carrera) {
+        if (typeof user.carrera === 'object' && user.carrera !== null) {
+          if (user.carrera.Nombre) {
+            carrera = user.carrera.Nombre;
+          } else if (user.carrera.attributes && user.carrera.attributes.Nombre) {
+            carrera = user.carrera.attributes.Nombre;
+          }
+        } else if (typeof user.carrera === 'string') {
+          carrera = user.carrera;
+        }
+      }
+      // Lógica igual que en usuarios para campus
+      let campus = "";
+      if (user.campus) {
+        if (typeof user.campus === 'object' && user.campus !== null) {
+          if (user.campus.Nombre) {
+            campus = user.campus.Nombre;
+          } else if (user.campus.attributes && user.campus.attributes.Nombre) {
+            campus = user.campus.attributes.Nombre;
+          }
+        } else if (typeof user.campus === 'string') {
+          campus = user.campus;
+        }
+      }
       return [
         consulta.id,
         consulta.documentId || "",
@@ -307,33 +346,27 @@ async function descargarConsultasCSV() {
         user.email || "",
         user.Numcontrol || "",
         user.Genero || "",
-        user.Carrera || "",
-        user.campus || "",
+        carrera,
+        campus,
         user.Estado || "",
-        user.rol || ""
+        user.rol || "",
+        user.apellido || ""
       ];
     });
-    
     const csv = [encabezados, ...filas]
       .map((row) => row.map((val: any) => `"${val}"`).join(","))
       .join("\n");
-    
     // Descargar el archivo
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     saveAs(blob, "consultas_completas.csv");
-    
     // Mensaje de éxito
     console.log("CSV generado exitosamente");
-    
   } catch (apiError: any) {
     console.error("Error en la API:", apiError);
-    
-    // Mensaje de error más explicativo
     let errorMessage = "Error al comunicarse con la API.";
     if (apiError?.message) {
       errorMessage += ` ${apiError.message}`;
     }
-    
     alert(errorMessage);
   }
 }
@@ -342,20 +375,39 @@ async function descargarConsultasCSV() {
 async function descargarConsultasExcel() {
   try {
     console.log("Iniciando descarga de Excel usando api.ts...");
-    
-    // Usar populate=* que sabemos que funciona
-    const response = await fetchAPI("/api/consultas?populate=*");
-    console.log("Datos para Excel:", response);
-    
-    // Si llegamos aquí, tenemos datos para procesar
-    const consultas = response.data || [];
-    
+    // Usar la función que trae todas las páginas
+    const consultas = await fetchAllConsultas();
     // Procesar los datos para Excel
     const filas = consultas.map((consulta: any) => {
       // Acceder a book y user que pueden ser null
       const book = consulta.book || {};
       const user = consulta.user || {};
-      
+      // Lógica igual que en usuarios para carrera
+      let carrera = "";
+      if (user.carrera) {
+        if (typeof user.carrera === 'object' && user.carrera !== null) {
+          if (user.carrera.Nombre) {
+            carrera = user.carrera.Nombre;
+          } else if (user.carrera.attributes && user.carrera.attributes.Nombre) {
+            carrera = user.carrera.attributes.Nombre;
+          }
+        } else if (typeof user.carrera === 'string') {
+          carrera = user.carrera;
+        }
+      }
+      // Lógica igual que en usuarios para campus
+      let campus = "";
+      if (user.campus) {
+        if (typeof user.campus === 'object' && user.campus !== null) {
+          if (user.campus.Nombre) {
+            campus = user.campus.Nombre;
+          } else if (user.campus.attributes && user.campus.attributes.Nombre) {
+            campus = user.campus.attributes.Nombre;
+          }
+        } else if (typeof user.campus === 'string') {
+          campus = user.campus;
+        }
+      }
       return {
         "ID": consulta.id,
         "DocumentID": consulta.documentId || "",
@@ -377,41 +429,34 @@ async function descargarConsultasExcel() {
         "Email": user.email || "",
         "Num Control": user.Numcontrol || "",
         "Género": user.Genero || "",
-        "Carrera": user.Carrera || "",
-        "Campus": user.campus || "",
+        "Carrera": carrera,
+        "Campus": campus,
         "Estado": user.Estado || "",
-        "Rol": user.rol || ""
+        "Rol": user.rol || "",
+        "Apellido": user.apellido || ""
       };
     });
-    
     // Crear la hoja de Excel
     const ws = XLSX.utils.json_to_sheet(filas);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Consultas");
-    
     // Ajustar anchos de columna automáticamente
     const colWidths = Object.keys(filas[0] || {}).map(k => 
       Math.max(k.length, ...filas.map((f: any) => String(f[k] || '').length))
     );
     ws['!cols'] = colWidths.map(w => ({ wch: w }));
-    
     // Generar y descargar el archivo
     const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
     const blob = new Blob([excelBuffer], { type: "application/octet-stream" });
     saveAs(blob, "consultas_completas.xlsx");
-    
     // Mensaje de éxito
     console.log("Excel generado exitosamente");
-    
   } catch (error: any) {
     console.error("Error en Excel:", error);
-    
-    // Mensaje de error más explicativo
     let errorMessage = "Error al descargar Excel.";
     if (error?.message) {
       errorMessage += ` ${error.message}`;
     }
-    
     alert(errorMessage);
   }
 }
@@ -908,6 +953,134 @@ async function descargarHistorialDevoluciones() {
     saveAs(blob, "historial_devoluciones.xlsx");
   } catch (error) {
     alert("Error al descargar historial de devoluciones");
+  }
+}
+
+// Función para transformar usuario igual que en la tabla de usuarios
+function transformarUsuarioParaTabla(user: any) {
+  let status = "activo";
+  if (user.Estado) {
+    status = user.Estado.toLowerCase();
+  } else if (user.blocked) {
+    status = "inactivo";
+  } else if (!user.confirmed) {
+    status = "pendiente";
+  }
+  return {
+    id: user.id,
+    fullName: user.username || 'Sin nombre',
+    apellido: user.apellido || '',
+    campus: user.campus || undefined,
+    careerId: typeof user.carrera === 'object' && user.carrera !== null
+      ? user.carrera.id?.toString() || ''
+      : user.carrera?.toString() || '',
+    status,
+    Estado: user.Estado,
+    numcontrol: user.Numcontrol || user.numcontrol || '',
+    email: user.email || '',
+    rol: user.rol || '',
+    createdAt: user.createdAt || '',
+    career: typeof user.carrera === 'object' && user.carrera !== null
+      ? user.carrera.Nombre || ''
+      : '',
+    gender: user.Genero?.toLowerCase() || (Math.random() > 0.5 ? "masculino" : "femenino"),
+    Genero: user.Genero || '',
+  };
+}
+
+// Función para descargar todos los usuarios en Excel (igual que la tabla de usuarios)
+async function descargarUsuariosExcel() {
+  try {
+    // Obtener todos los usuarios desde la API
+    const usuarios = await fetchAPI('/api/users');
+    // Obtener todos los campus y carreras desde la API (igual que en usuarios/page.tsx)
+    const campusRes = await fetch('http://localhost:1337/api/campuses');
+    const campusData = await campusRes.json();
+    const campuses = campusData.data || campusData;
+    const careerRes = await fetch('http://localhost:1337/api/carreras?populate=campus');
+    const careerData = await careerRes.json();
+    const careers = careerData.data || careerData;
+
+    // Transformar igual que en la tabla
+    const usuariosTabla = usuarios.map(transformarUsuarioParaTabla);
+    // Encabezados igual que la tabla
+    const encabezados = [
+      "ID",
+      "Nombre",
+      "Apellidos",
+      "Género",
+      "Número de control",
+      "Correo electrónico",
+      "Carrera",
+      "Campus",
+      "Rol",
+      "Estado",
+      "Fecha de registro"
+    ];
+    // Procesar usuarios
+    const filas = usuariosTabla.map((user: any) => {
+      // Buscar nombre de campus
+      let campus = '';
+      if (user.campus) {
+        if (typeof user.campus === 'object' && user.campus !== null) {
+          campus = user.campus.attributes?.Nombre || user.campus.Nombre || '';
+        } else if (typeof user.campus === 'string' || typeof user.campus === 'number') {
+          // Buscar en la lista de campus
+          const campusObj = campuses.find((c: any) => c.id?.toString() === user.campus.toString());
+          campus = campusObj?.attributes?.Nombre || campusObj?.Nombre || user.campus;
+        }
+      }
+      // Buscar nombre de carrera
+      let carrera = user.career || '';
+      if (!carrera && user.careerId) {
+        const careerObj = careers.find((c: any) => c.id?.toString() === user.careerId.toString());
+        carrera = careerObj?.attributes?.Nombre || careerObj?.Nombre || '';
+      }
+      // Fecha de registro (formato dd MMM yyyy, español)
+      let fecha = '';
+      if (user.createdAt) {
+        try {
+          fecha = format(new Date(user.createdAt), 'dd MMM yyyy', { locale: es });
+        } catch {
+          fecha = user.createdAt;
+        }
+      }
+      return [
+        user.id,
+        user.fullName,
+        user.apellido,
+        user.Genero,
+        user.numcontrol,
+        user.email,
+        carrera,
+        campus,
+        user.rol,
+        user.status,
+        fecha
+      ];
+    });
+    // Crear hoja de Excel
+    const ws = XLSX.utils.aoa_to_sheet([encabezados, ...filas]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Usuarios");
+    // Ajustar anchos de columna automáticamente
+    const colWidths = encabezados.map((k, i) =>
+      Math.max(k.length, ...filas.map((f: any) => String(f[i] || '').length))
+    );
+    ws['!cols'] = colWidths.map(w => ({ wch: w }));
+    // Generar y descargar el archivo
+    const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([excelBuffer], { type: "application/octet-stream" });
+    saveAs(blob, "usuarios.xlsx");
+    // Mensaje de éxito
+    console.log("Excel de usuarios generado exitosamente");
+  } catch (error: any) {
+    console.error("Error al descargar usuarios:", error);
+    let errorMessage = "Error al descargar usuarios.";
+    if (error?.message) {
+      errorMessage += ` ${error.message}`;
+    }
+    alert(errorMessage);
   }
 }
 
@@ -1940,6 +2113,7 @@ export default function ReportesPage() {
               { title: "Devoluciones Pendientes", description: "Préstamos con devolución pendiente", icon: <FileText className="h-5 w-5" />, color: "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400", onClick: descargarDevolucionesPendientes },
               { title: "Top Libros del Semestre", description: "Libros más prestados este semestre", icon: <BarChart className="h-5 w-5" />, color: "bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400", onClick: descargarTopLibrosSemestre },
               { title: "Historial de Devoluciones", description: "Histórico de devoluciones por mes", icon: <LineChart className="h-5 w-5" />, color: "bg-cyan-100 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400", onClick: descargarHistorialDevoluciones },
+              { title: "Usuarios (Excel)", description: "Exporta todos los usuarios como se ven en la tabla", icon: <Users className="h-5 w-5" />, color: "bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400", onClick: descargarUsuariosExcel },
             ].map((report, i) => (
               <div key={i} className="flex flex-col border rounded-lg overflow-hidden transition-all hover:shadow-md">
                 <div className="p-4 flex items-start gap-4">
