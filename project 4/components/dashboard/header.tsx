@@ -35,7 +35,7 @@ const permissionMap = {
 };
 
 const navigationItems: NavigationItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" />, permissionKey: 'dashboard' },
+  { href: "/dashboard", label: "Inicio", icon: <LayoutDashboard className="h-4 w-4" />, permissionKey: 'dashboard' },
   { href: "/catalogo", label: "Catálogo", icon: <BookText className="h-4 w-4" />, permissionKey: 'catalogo' },
   { href: "/prestamos", label: "Préstamos", icon: <BookMarked className="h-4 w-4" />, permissionKey: 'prestamos' },
   { href: "/usuarios", label: "Usuarios", icon: <Users className="h-4 w-4" />, permissionKey: 'usuarios' },
@@ -50,8 +50,8 @@ const PublicNavigation = ({ pathname }: { pathname: string }) => (
       className={cn(
         "flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ease-in-out",
         pathname === "/catalogo"
-          ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 scale-105"
-          : "text-muted-foreground hover:text-foreground hover:bg-muted"
+          ? "text-black dark:text-white tec:text-white scale-105"
+          : "text-muted-foreground hover:text-foreground"
       )}
     >
       <BookText className="h-4 w-4" />
@@ -131,8 +131,8 @@ export function Header() {
                       className={cn(
                         "flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ease-in-out",
                         pathname === item.href
-                          ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 scale-105"
-                          : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                          ? "text-black dark:text-white tec:text-white scale-105"
+                          : "text-muted-foreground hover:text-foreground"
                       )}
                     >
                       {item.icon}

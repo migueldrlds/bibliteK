@@ -126,7 +126,7 @@ const getStatusBadge = (status: string) => {
     activo: "bg-emerald-500 hover:bg-emerald-600 text-xs px-2 py-0.5",
     renovado: "bg-blue-500 hover:bg-blue-600 text-xs px-2 py-0.5",
     atrasado: "bg-amber-600 hover:bg-amber-700 text-xs px-2 py-0.5 font-medium",
-    devuelto: "bg-slate-500 hover:bg-slate-600 text-xs px-2 py-0.5",
+    devuelto: "bg-[rgb(147,149,153)] hover:bg-[rgb(147,149,153)] text-xs px-2 py-0.5 text-white",
     perdido: "bg-rose-500 hover:bg-rose-600 text-xs px-2 py-0.5",
   };
 
@@ -172,6 +172,21 @@ const getReturnTypeBadge = (returnType: string | null) => {
     atrasado: "Atrasado",
   };
 
+  if (returnType === 'en_plazo') {
+    return (
+      <span style={{ color: '#22c55e', fontSize: '10px', fontWeight: 400, background: 'none', border: 'none', padding: 0 }}>
+        {labels[returnType]}
+      </span>
+    );
+  }
+  if (returnType === 'atrasado') {
+    return (
+      <span style={{ color: '#f59e42', fontSize: '10px', fontWeight: 400, background: 'none', border: 'none', padding: 0 }}>
+        {labels[returnType]}
+      </span>
+    );
+  }
+
   return (
     <Badge variant="outline" className={styles[returnType]}>
       {labels[returnType]}
@@ -188,10 +203,11 @@ const getCampusBadge = (campus: string | undefined) => {
     return (
       <Badge
         variant="outline"
-        className="bg-white text-gray-700 border border-gray-300 dark:bg-transparent dark:text-gray-200 dark:border-gray-500 font-medium text-xs px-3 py-0.5 rounded-md flex items-center gap-1 shadow-sm"
+        className="bg-white text-gray-700 border border-gray-300 dark:bg-transparent dark:text-gray-200 dark:border-gray-500 font-medium text-xs px-2 py-0.5 rounded-md flex items-center gap-1 shadow-sm min-w-0 max-w-[120px] truncate"
+        style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '6px' }}
       >
         <MapPin className="h-3 w-3 -ml-1 mr-1 text-gray-400 dark:text-gray-400" />
-        <span className="-ml-0.5">{campus}</span>
+        <span className="-ml-0.5 truncate">{campus}</span>
       </Badge>
     );
   }
@@ -1979,25 +1995,6 @@ function PrestamosContent(): JSX.Element | null {
             <TabsTrigger value="devuelto">Devueltos</TabsTrigger>
             <TabsTrigger value="perdido">Perdidos</TabsTrigger>
         </TabsList>
-
-          <div className="flex items-center gap-2">
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className={sortOrder === "recientes" ? "text-primary" : ""}
-              onClick={() => setSortOrder("recientes")}
-            >
-              Más recientes
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="sm"
-              className={sortOrder === "antiguos" ? "text-primary" : ""}
-              onClick={() => setSortOrder("antiguos")}
-            >
-              Más antiguos
-            </Button>
-          </div>
         </div>
 
         <TabsContent value={activeTab || "todos"} className="mt-6">
@@ -2175,9 +2172,9 @@ function PrestamosContent(): JSX.Element | null {
                             </div>
                           </TableCell>
                           <TableCell className="px-4 py-2">
-                            <div className="flex flex-col items-center gap-1">
-                          {getStatusBadge(loan.status)}
-                          {loan.status === "devuelto" && loan.returnType && getReturnTypeBadge(loan.returnType)}
+                            <div className="flex flex-col items-start gap-1">
+                              {getStatusBadge(loan.status)}
+                              {loan.status === "devuelto" && loan.returnType && getReturnTypeBadge(loan.returnType)}
                               {loan.status === "renovado" && (
                                 <div className="flex items-center gap-1 mt-1 text-[10px] text-muted-foreground">
                                   <RotateCw className="h-2.5 w-2.5" />
@@ -2195,8 +2192,8 @@ function PrestamosContent(): JSX.Element | null {
                                   }</span>
                                 </div>
                               )}
-                        </div>
-                      </TableCell>
+                            </div>
+                          </TableCell>
                           <TableCell className="px-4 py-2">
                             <div className="flex justify-center">
                           <DropdownMenu>
@@ -2286,25 +2283,25 @@ function PrestamosContent(): JSX.Element | null {
           <div className="border-b pb-3">
             <div className="flex items-center justify-between mb-1">
               <h3 className="font-medium text-lg">{selectedLoan.book.titulo}</h3>
-                  {getStatusBadge(selectedLoan.status)}
-                </div>
-            <p className="text-sm text-muted-foreground flex items-center gap-1">
-              <BookOpen className="h-3 w-3" /> 
-              <span>Clasificación: {
-                // Buscar el libro por ID para obtener su clasificación
-                allBooks.find(book => 
-                  book.id.toString() === selectedLoan.bookId.toString() || 
-                  book.id_libro === selectedLoan.bookId.toString()
-                )?.clasificacion || "No disponible"
-              }</span>
-            </p>
-                </div>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm text-muted-foreground flex items-center gap-1">
+                <span className="font-bold">Clasificación:</span> {
+                  allBooks.find(book => 
+                    book.id.toString() === selectedLoan.bookId.toString() || 
+                    book.id_libro === selectedLoan.bookId.toString()
+                  )?.clasificacion || "No disponible"
+                }
+              </p>
+              {getStatusBadge(selectedLoan.status)}
+            </div>
+          </div>
 
           {/* Información del préstamo */}
           <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
               <p className="text-muted-foreground text-xs mb-1 flex items-center gap-1">
-                <User className="h-3 w-3" /> Usuario
+                <User className="h-3 w-3" /> <span className="font-bold">Usuario</span>
               </p>
               <p className="font-medium">{selectedLoan.user}</p>
               <div className="flex items-center gap-1 mt-1">
@@ -2315,19 +2312,19 @@ function PrestamosContent(): JSX.Element | null {
               </div>
                 <div>
               <p className="text-muted-foreground text-xs mb-1 flex items-center gap-1">
-                <Building className="h-3 w-3" /> Campus
+                <Building className="h-3 w-3" /> <span className="font-bold">Campus</span>
               </p>
               <div>{getCampusBadge(selectedLoan.campus_origen)}</div>
                   </div>
                   <div>
               <p className="text-muted-foreground text-xs mb-1 flex items-center gap-1">
-                <CalendarIcon className="h-3 w-3" /> Fecha préstamo
+                <CalendarIcon className="h-3 w-3" /> <span className="font-bold">Fecha préstamo</span>
               </p>
               <p>{formatDate(selectedLoan.loanDate, true).date}</p>
               </div>
                 <div>
               <p className="text-muted-foreground text-xs mb-1 flex items-center gap-1">
-                <CalendarClock className="h-3 w-3" /> Fecha devolución
+                <CalendarClock className="h-3 w-3" /> <span className="font-bold">Fecha devolución</span>
               </p>
               <p>{formatDate(selectedLoan.returnDate).date}</p>
                   </div>
@@ -2395,53 +2392,19 @@ function PrestamosContent(): JSX.Element | null {
                   </div>
                 )}
             </div>
-        <DialogFooter className="flex justify-between items-center border-t pt-3">
-          <p className="text-xs text-muted-foreground">
-            {selectedLoan.status === "renovado" && 
-              `Renovaciones: ${selectedLoan.renewalCount} de ${
-                (() => {
-                  const clasificacion = (allBooks.find(book => 
-                    book.id?.toString() === selectedLoan.bookId?.toString() || 
-                    book.id_libro === selectedLoan.bookId?.toString()
-                  )?.clasificacion || selectedLoan.book?.clasificacion || "");
-                  
-                  // Libros de literatura (que empiezan con P o incluyen "literatura")
-                  return loanService.isLiteratureBook(clasificacion) ? 2 : 1;
-                })()
-              }`
-            }
-          </p>
+        <DialogFooter className="flex flex-col gap-2 items-stretch border-t pt-3">
+          {selectedLoan.status === "renovado" && (
+            <div className="w-full text-left text-xs text-muted-foreground mb-2">
+              Renovaciones: {selectedLoan.renewalCount} de {(() => {
+                const clasificacion = (allBooks.find(book => 
+                  book.id?.toString() === selectedLoan.bookId?.toString() || 
+                  book.id_libro === selectedLoan.bookId?.toString()
+                )?.clasificacion || selectedLoan.book?.clasificacion || "");
+                return loanService.isLiteratureBook(clasificacion) ? 2 : 1;
+              })()}
+            </div>
+          )}
           <div className="flex gap-2">
-            {/* Botón de renovar (solo para préstamos activos y con renovaciones disponibles) */}
-            {selectedLoan.status === "activo" && selectedLoan.renewalCount < 2 && (
-              <Button 
-                variant="outline"
-                size="sm"
-                className="border-blue-200 text-blue-600"
-                onClick={() => {
-                  setShowDetailsDialog(false);
-                  handleRenewal(selectedLoan);
-                }}
-              >
-                <RotateCw className="mr-2 h-3.5 w-3.5" />
-                Renovar
-            </Button>
-            )}
-            
-            {/* Botón de marcar como devuelto (para préstamos activos, renovados o atrasados) */}
-            {(selectedLoan.status === "activo" || selectedLoan.status === "renovado" || selectedLoan.status === "atrasado") && (
-              <Button 
-                size="sm"
-                onClick={() => {
-                  setShowDetailsDialog(false);
-                  handleReturn(selectedLoan);
-                }}
-              >
-                <BookCheck className="mr-2 h-3.5 w-3.5" />
-                Devolver
-              </Button>
-            )}
-            
             {/* Botón de marcar como perdido (para préstamos activos, renovados o atrasados) */}
             {(selectedLoan.status === "activo" || selectedLoan.status === "renovado" || selectedLoan.status === "atrasado") && (
               <Button 
@@ -2456,6 +2419,34 @@ function PrestamosContent(): JSX.Element | null {
               >
                 <AlertTriangle className="mr-2 h-3.5 w-3.5" />
                 Perdido
+              </Button>
+            )}
+            {/* Botón de renovar solo en préstamos activos */}
+            {selectedLoan.status === "activo" && selectedLoan.renewalCount < 2 && (
+              <Button 
+                variant="outline"
+                size="sm"
+                className="border-blue-200 text-blue-600"
+                onClick={() => {
+                  setShowDetailsDialog(false);
+                  handleRenewal(selectedLoan);
+                }}
+              >
+                <RotateCw className="mr-2 h-3.5 w-3.5" />
+                Renovar
+              </Button>
+            )}
+            {/* Botón de marcar como devuelto (para préstamos activos, renovados o atrasados) */}
+            {(selectedLoan.status === "activo" || selectedLoan.status === "renovado" || selectedLoan.status === "atrasado") && (
+              <Button 
+                size="sm"
+                onClick={() => {
+                  setShowDetailsDialog(false);
+                  handleReturn(selectedLoan);
+                }}
+              >
+                <BookCheck className="mr-2 h-3.5 w-3.5" />
+                Devolver
               </Button>
             )}
           </div>
@@ -3022,78 +3013,21 @@ function PrestamosContent(): JSX.Element | null {
                 </div>
                 
                 {/* Resumen */}
-                <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800 rounded-md p-3">
-                  <div className="flex justify-between items-center mb-1">
-                    <p className="font-medium text-sm flex items-center gap-1">
-                      <RefreshCw className="h-4 w-4 text-blue-500" />
-                      Información de renovación
-                    </p>
-                    {/* Visualización del estado de renovaciones */}
-                    <div className="flex items-center gap-1">
-                      <div className={`h-2 w-2 rounded-full ${selectedLoan.renewalCount >= 1 ? 'bg-blue-500' : 'bg-gray-300'}`}></div>
-                      <div className={`h-2 w-2 rounded-full ${selectedLoan.renewalCount >= 2 ? 'bg-blue-500' : 'bg-gray-300'}`}></div>
-                    </div>
-                  </div>
-                  
-                  {/* Estado de renovaciones y reglas */}
-                  <div className="space-y-2">
-                    <p className="text-xs flex items-center gap-1">
-                      <RotateCw className="h-3 w-3 text-blue-500" />
-                      <span>
-                        Renovaciones: <span className="font-medium">{selectedLoan?.renewalCount || 0} de {
-                          (() => {
-                            if (!selectedLoan?.book) return 1;
-                            
-                            // Obtener la clasificación del libro directamente de selectedLoan.book
-                            const clasificacion = selectedLoan.book.clasificacion || "";
-                            
-                            // Verificar si es literatura con consola para diagnóstico
-                            console.log("Modal renovación - clasificación:", clasificacion);
-                            console.log("Modal renovación - es literatura:", loanService.isLiteratureBook(clasificacion));
-                            
-                            // Usar la función del servicio para determinar si es literatura
-                            return loanService.isLiteratureBook(clasificacion) ? 2 : 1;
-                          })()
-                        }</span>
-                      </span>
-                    </p>
-                    
-                    {selectedLoan && (() => {
-                      // Obtener la clasificación directamente del objeto book en selectedLoan
-                      const clasificacion = selectedLoan.book?.clasificacion || "";
-                      
-                      // Usar la función del servicio para determinar si es literatura
-                      const esLiteratura = loanService.isLiteratureBook(clasificacion);
-                      
-                      if (esLiteratura) {
-                        if (selectedLoan.renewalCount === 0) {
-                          return <p className="text-xs text-blue-600">Primera renovación disponible</p>;
-                        } else if (selectedLoan.renewalCount === 1) {
-                          return <p className="text-xs text-amber-600">Esta será la última renovación permitida</p>;
-                        } else {
-                          return <p className="text-xs text-rose-600">No hay más renovaciones disponibles</p>;
-                        }
-                      } else {
-                        if (selectedLoan.renewalCount === 0) {
-                          return <p className="text-xs text-amber-600">Esta será la única renovación permitida</p>;
-                        } else {
-                          return <p className="text-xs text-rose-600">No hay más renovaciones disponibles</p>;
-                        }
-                      }
-                    })()}
-                    
-                    {/* Tiempo extendido */}
-                    {renewalDate && selectedLoan && (
-                      <div className="flex items-center gap-2 mt-2 text-xs text-green-600">
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        <span>
-                          Tiempo extendido: <span className="font-medium">
-                            {Math.ceil((renewalDate.getTime() - new Date(selectedLoan.returnDate).getTime()) / (1000 * 60 * 60 * 24))} días
-                          </span>
-                        </span>
-                      </div>
-                    )}
-                  </div>
+                <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800 rounded-md p-3 text-left">
+                  <p className="font-medium text-sm flex items-center gap-1">
+                    <RefreshCw className="h-4 w-4 text-blue-500" />
+                    Renovaciones: <span className="text-blue-600">{selectedLoan?.renewalCount || 0} de {(() => {
+                      if (!selectedLoan?.book) return 1;
+                      const clasificacion = selectedLoan.book.clasificacion || "";
+                      return loanService.isLiteratureBook(clasificacion) ? 2 : 1;
+                    })()}</span>
+                    <span className="text-xs text-muted-foreground ml-2">(Disponible: {(() => {
+                      if (!selectedLoan?.book) return 1;
+                      const clasificacion = selectedLoan.book.clasificacion || "";
+                      const max = loanService.isLiteratureBook(clasificacion) ? 2 : 1;
+                      return max - (selectedLoan?.renewalCount || 0);
+                    })()})</span>
+                  </p>
                 </div>
               </div>
             )}

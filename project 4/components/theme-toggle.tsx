@@ -34,7 +34,7 @@ export function ThemeToggle({ size = "default" }: ThemeToggleProps) {
         <Button 
           variant="ghost" 
           size={size === "sm" ? "icon-sm" : "icon"} 
-          className="rounded-full"
+          className="rounded-full hover:bg-transparent focus:bg-transparent active:bg-transparent"
         >
           {theme === "light" && <Sun className="h-[1.1rem] w-[1.1rem]" />}
           {theme === "dark" && <Moon className="h-[1.1rem] w-[1.1rem]" />}
@@ -57,7 +57,7 @@ export function ThemeToggle({ size = "default" }: ThemeToggleProps) {
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => setTheme("tec")}>
           <School className="mr-2 h-4 w-4" />
-          <span>Modo Tec</span>
+          <span>Institucional</span>
           {theme === "tec" && <span className="ml-auto text-xs opacity-60">✓</span>}
         </DropdownMenuItem>
         <DropdownMenuSeparator />

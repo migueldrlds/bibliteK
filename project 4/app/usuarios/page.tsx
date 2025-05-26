@@ -563,9 +563,9 @@ export default function UsuariosPage() {
     const roleToLower = role?.toLowerCase() || "";
     
     const styles: Record<string, string> = {
-      alumno: "bg-emerald-500 hover:bg-emerald-600",
+      alumno: "bg-blue-500 hover:bg-blue-600",
       administrador: "bg-rose-500 hover:bg-rose-600",
-      interno: "bg-blue-500 hover:bg-blue-600",
+      interno: "bg-emerald-500 hover:bg-emerald-600",
       authenticated: "bg-gray-500 hover:bg-gray-600",
     };
 
@@ -583,7 +583,7 @@ export default function UsuariosPage() {
     console.log("Role original:", role, "Role procesado:", roleToLower, "Key usada:", roleKey);
 
     return (
-      <Badge className={styles[roleKey]}>
+      <Badge className={styles[roleKey] + " rounded-md"}>
         {labels[roleKey]}
       </Badge>
     );
@@ -591,7 +591,7 @@ export default function UsuariosPage() {
 
   const getStatusBadge = (status: string | undefined) => {
     if (!status) return (
-      <Badge variant="outline" className="text-gray-600 border-gray-600">
+      <Badge variant="outline" className="text-gray-600 border-gray-600 rounded-md">
         Desconocido
       </Badge>
     );
@@ -599,31 +599,31 @@ export default function UsuariosPage() {
     switch (status.toLowerCase()) {
       case "activo":
       return (
-        <Badge variant="outline" className="text-green-600 border-green-600">
+        <Badge variant="outline" className="text-green-600 border-green-600 rounded-md">
           Activo
         </Badge>
       );
       case "pendiente":
       return (
-        <Badge variant="outline" className="text-orange-600 border-orange-600">
+        <Badge variant="outline" className="text-orange-600 border-orange-600 rounded-md">
           Pendiente
         </Badge>
       );
       case "inactivo":
       return (
-        <Badge variant="outline" className="text-gray-600 border-gray-600">
+        <Badge variant="outline" className="text-gray-600 border-gray-600 rounded-md">
           Inactivo
         </Badge>
       );
       case "baja":
         return (
-          <Badge variant="outline" className="text-red-600 border-red-600">
+          <Badge variant="outline" className="text-red-600 border-red-600 rounded-md">
             Baja
           </Badge>
         );
       default:
         return (
-          <Badge variant="outline" className="text-gray-600 border-gray-600">
+          <Badge variant="outline" className="text-gray-600 border-gray-600 rounded-md">
             {status.charAt(0).toUpperCase() + status.slice(1).toLowerCase()}
           </Badge>
         );
@@ -764,31 +764,34 @@ export default function UsuariosPage() {
           </Button>
         </div>
 
-        <Tabs value={roleFilter} onValueChange={setRoleFilter} className="w-auto">
-          <TabsList className="inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground">
-            <TabsTrigger value="todos" className="rounded-md px-3 py-1 text-sm font-medium">
-              Todos
-            </TabsTrigger>
-            <TabsTrigger value="Alumno" className="rounded-md px-3 py-1 text-sm font-medium">
-              Alumnos
-            </TabsTrigger>
-            <TabsTrigger value="Interno" className="rounded-md px-3 py-1 text-sm font-medium">
-              Internos
-            </TabsTrigger>
-            <TabsTrigger value="Administrador" className="rounded-md px-3 py-1 text-sm font-medium">
-              Administradores
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+        {/* Agrupar filtros y barra de búsqueda en la misma fila */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-4">
+          <Tabs value={roleFilter} onValueChange={setRoleFilter} className="w-auto">
+            <TabsList className="inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground">
+              <TabsTrigger value="todos" className="rounded-md px-3 py-1 text-sm font-medium">
+                Todos
+              </TabsTrigger>
+              <TabsTrigger value="Alumno" className="rounded-md px-3 py-1 text-sm font-medium">
+                Alumnos
+              </TabsTrigger>
+              <TabsTrigger value="Interno" className="rounded-md px-3 py-1 text-sm font-medium">
+                Internos
+              </TabsTrigger>
+              <TabsTrigger value="Administrador" className="rounded-md px-3 py-1 text-sm font-medium">
+                Administradores
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
 
-        <div className="relative w-full sm:w-auto mb-4">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por nombre, ID o correo..."
-            className="pl-9 w-full min-w-[300px]"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+          <div className="relative w-full sm:w-auto md:w-[350px]">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por nombre, ID o correo..."
+              className="pl-9 w-full min-w-[200px]"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
         </div>
 
         <div className="rounded-md border">
