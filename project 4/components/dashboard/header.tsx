@@ -131,7 +131,7 @@ export function Header() {
                       className={cn(
                         "flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ease-in-out",
                         pathname === item.href
-                          ? "text-black dark:text-white tec:text-white scale-105"
+                          ? "dark:text-white scale-105 tec:text-white"
                           : "text-muted-foreground hover:text-foreground"
                       )}
                     >

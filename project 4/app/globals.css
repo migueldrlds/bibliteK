@@ -231,6 +231,39 @@
   filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.5));
 }
 
+/* Selección de texto SOLO en el botón activo/seleccionado del menú en modo institucional */
+.tec nav [aria-current="page"]::selection,
+.tec .navbar [aria-current="page"]::selection,
+.tec header [aria-current="page"]::selection,
+.tec nav .active::selection,
+.tec .navbar .active::selection,
+.tec header .active::selection,
+.tec nav [data-active="true"]::selection,
+.tec .navbar [data-active="true"]::selection,
+.tec header [data-active="true"]::selection,
+.tec nav .selected::selection,
+.tec .navbar .selected::selection,
+.tec header .selected::selection {
+  background: #1b396a !important;
+  color: #fff !important;
+}
+
+/* Botón activo/seleccionado del menú en modo institucional: texto siempre blanco */
+.tec nav [aria-current="page"],
+.tec .navbar [aria-current="page"],
+.tec header [aria-current="page"],
+.tec nav .active,
+.tec .navbar .active,
+.tec header .active,
+.tec nav [data-active="true"],
+.tec .navbar [data-active="true"],
+.tec header [data-active="true"],
+.tec nav .selected,
+.tec .navbar .selected,
+.tec header .selected {
+  color: #fff !important;
+}
+
 @layer utilities {
   .animate-fade-up {
     animation: fade-up 0.5s ease-out forwards;
