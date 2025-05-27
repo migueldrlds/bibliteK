@@ -77,11 +77,11 @@ export default function Login() {
       ) {
         setShowBlockedModal(true);
       } else {
-        toast({
-          title: "Error al iniciar sesión",
-          description: authError || "Verifica tus credenciales e intenta nuevamente",
-          variant: "destructive",
-        });
+      toast({
+        title: "Error al iniciar sesión",
+        description: authError || "Verifica tus credenciales e intenta nuevamente",
+        variant: "destructive",
+      });
       }
     } finally {
       setIsLoading(false);

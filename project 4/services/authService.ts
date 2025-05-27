@@ -18,7 +18,7 @@ export const authService = {
           password: password
         }),
       });
-
+      
       let data;
       try {
         data = await response.json();
@@ -32,7 +32,7 @@ export const authService = {
       }
 
       console.log("Respuesta completa de la API:", data);
-
+      
       if (!data.jwt) {
         console.error("No se recibió token JWT en la respuesta");
         throw new Error('Credenciales inválidas');

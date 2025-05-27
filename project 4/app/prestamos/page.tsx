@@ -636,8 +636,10 @@ function PrestamosContent(): JSX.Element | null {
         
         // Transformar los datos de la API al formato esperado por la UI
         const transformedLoans: UILoan[] = response.map((loan: Loan) => {
-          // Determinar tipo de devolución
+          // Determinar tipo de devolución y estado
           let returnType = null;
+          let status = loan.estado;
+
           if (loan.estado === 'devuelto' && loan.fecha_devolucion_real) {
             const dueDate = new Date(loan.fecha_devolucion_esperada);
             const actualReturn = new Date(loan.fecha_devolucion_real);
@@ -646,6 +648,7 @@ function PrestamosContent(): JSX.Element | null {
               returnType = 'en_plazo';
             } else {
               returnType = 'atrasado';
+              status = 'atrasado';
             }
           } else if (loan.estado === 'renovado') {
             returnType = 'renovado';
@@ -663,7 +666,7 @@ function PrestamosContent(): JSX.Element | null {
             userCarrera: loan.usuario?.Carrera,
             loanDate: loan.fecha_prestamo,
             returnDate: loan.fecha_devolucion_esperada,
-            status: loan.estado,
+            status: status,
             renewalCount: loan.renewalCount || 0,
             actualReturnDate: loan.fecha_devolucion_real,
             returnType,
@@ -1027,10 +1030,12 @@ function PrestamosContent(): JSX.Element | null {
     const dueDate = new Date(loan.returnDate);
     const returnDate = new Date(loan.actualReturnDate);
 
-    if (returnDate <= dueDate) {
-      return "en_plazo";
-    } else {
+    // Si la devolución fue después de la fecha esperada, el estado debería ser atrasado
+    if (returnDate > dueDate) {
+      loan.status = "atrasado";
       return "atrasado";
+    } else {
+      return "en_plazo";
     }
   };
 
@@ -1155,11 +1160,17 @@ function PrestamosContent(): JSX.Element | null {
       await loanService.returnLoan(loan.id, loan.documentId);
       
       const today = new Date().toISOString();
-      const returnType = determineReturnType({
-        ...loan,
-        status: "devuelto",
-        actualReturnDate: today
-      });
+      const dueDate = new Date(loan.returnDate);
+      const actualReturn = new Date(today);
+      
+      // Determinar el estado y tipo de devolución
+      let status = 'devuelto';
+      let returnType = 'en_plazo';
+      
+      if (actualReturn > dueDate) {
+        status = 'atrasado';
+        returnType = 'atrasado';
+      }
       
       // Recargar los libros para reflejar el cambio en el inventario
       await recargarLibrosConInventario();
@@ -1183,7 +1194,7 @@ function PrestamosContent(): JSX.Element | null {
         l.id === loan.id 
           ? { 
               ...l,
-              status: "devuelto",
+              status: status,
               actualReturnDate: today,
               returnType,
               multa: fineDetails.multa,
@@ -1191,11 +1202,12 @@ function PrestamosContent(): JSX.Element | null {
             } 
           : l
       ));
+      
     } catch (error) {
       console.error("Error al devolver préstamo:", error);
       toast({
         title: "Error",
-        description: "No se pudo procesar la devolución del libro",
+        description: "No se pudo devolver el préstamo",
         variant: "destructive",
       });
     }
