@@ -8,6 +8,7 @@ import path from 'path';
 interface EmailLog {
   loanId: number;
   lastSent: string;
+  nextReminderDate: string;
 }
 
 // Función para manejar el registro de correos enviados
@@ -33,24 +34,47 @@ function saveEmailLog(log: EmailLog[]) {
   }
 }
 
-function canSendEmail(loanId: number, emailLog: EmailLog[]): boolean {
+function canSendEmail(loanId: number, returnDate: Date, emailLog: EmailLog[]): boolean {
   const lastSent = emailLog.find(log => log.loanId === loanId);
   if (!lastSent) return true;
 
-  const lastSentDate = new Date(lastSent.lastSent);
-  const oneDayAgo = subDays(new Date(), 1);
+  const now = new Date();
+  const nextReminderDate = new Date(lastSent.nextReminderDate);
   
-  return isBefore(lastSentDate, oneDayAgo);
+  // Solo enviar si la fecha actual es posterior a la fecha del próximo recordatorio
+  return now >= nextReminderDate;
 }
 
-function updateEmailLog(loanId: number, emailLog: EmailLog[]) {
+function calculateNextReminderDate(returnDate: Date): Date {
+  const now = new Date();
+  const daysUntilReturn = Math.ceil((returnDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  
+  // Si faltan más de 7 días, programar el siguiente recordatorio para 3 días antes
+  if (daysUntilReturn > 7) {
+    return addDays(returnDate, -3);
+  }
+  // Si faltan entre 3 y 7 días, programar para 1 día antes
+  else if (daysUntilReturn > 3) {
+    return addDays(returnDate, -1);
+  }
+  // Si faltan menos de 3 días, programar para el día siguiente
+  else {
+    return addDays(now, 1);
+  }
+}
+
+function updateEmailLog(loanId: number, returnDate: Date, emailLog: EmailLog[]) {
+  const nextReminderDate = calculateNextReminderDate(returnDate);
   const existingLog = emailLog.findIndex(log => log.loanId === loanId);
+  
   if (existingLog !== -1) {
     emailLog[existingLog].lastSent = new Date().toISOString();
+    emailLog[existingLog].nextReminderDate = nextReminderDate.toISOString();
   } else {
     emailLog.push({
       loanId,
-      lastSent: new Date().toISOString()
+      lastSent: new Date().toISOString(),
+      nextReminderDate: nextReminderDate.toISOString()
     });
   }
   saveEmailLog(emailLog);
@@ -64,26 +88,19 @@ async function sendReturnReminders() {
     // Obtener todos los préstamos activos
     const loans = await loanService.getLoans();
     
-    // Filtrar préstamos que están próximos a vencer (3 días antes)
+    // Filtrar préstamos que están próximos a vencer
     const today = new Date();
     const loansToRemind = loans.filter(loan => {
       if (loan.estado !== 'activo' && loan.estado !== 'renovado') return false;
       
       const returnDate = new Date(loan.fecha_devolucion_esperada);
-      const threeDaysBefore = addDays(returnDate, -3);
-      
-      return isBefore(today, returnDate) && isBefore(threeDaysBefore, today);
+      return isBefore(today, returnDate) && canSendEmail(loan.id, returnDate, emailLog);
     });
 
     console.log(`Encontrados ${loansToRemind.length} préstamos para recordar`);
 
-    // Enviar recordatorios solo si no se ha enviado en las últimas 24 horas
+    // Enviar recordatorios
     for (const loan of loansToRemind) {
-      if (!canSendEmail(loan.id, emailLog)) {
-        console.log(`Omitiendo envío para préstamo ${loan.id} - Ya se envió un correo en las últimas 24 horas`);
-        continue;
-      }
-
       try {
         await emailService.sendReturnReminder({
           id: loan.id,
@@ -100,7 +117,7 @@ async function sendReturnReminders() {
           estado: loan.estado
         });
         console.log(`Recordatorio enviado para el préstamo ${loan.id}`);
-        updateEmailLog(loan.id, emailLog);
+        updateEmailLog(loan.id, new Date(loan.fecha_devolucion_esperada), emailLog);
       } catch (error) {
         console.error(`Error al enviar recordatorio para el préstamo ${loan.id}:`, error);
       }
