@@ -337,14 +337,11 @@ export const loanService = {
           const bookDetails = await bookService.getBook(loanData.book);
           const userDetails = await fetchAPI(`/api/users/${loanData.usuario}`);
 
-          console.log('Campus de origen que se enviará en el correo:', loanData.campus_origen);
-          await emailService.sendReturnConfirmation({
+          await emailService.sendReturnReminder({
             id: Number(id),
             book: {
               titulo: bookDetails.titulo,
-              autor: bookDetails.autor,
-              clasificacion: bookDetails.clasificacion,
-              categoria: bookDetails.categoria
+              autor: bookDetails.autor
             },
             usuario: {
               email: userDetails.email,
@@ -352,9 +349,7 @@ export const loanService = {
             },
             fecha_prestamo: loanData.fecha_prestamo || '',
             fecha_devolucion_esperada: loanData.fecha_devolucion_esperada || '',
-            estado: loanData.estado,
-            dias_atraso: loanData.dias_atraso || 0,
-            campus_origen: loanData.campus_origen || ''
+            estado: loanData.estado
           });
           console.log("Correo de confirmación de devolución enviado exitosamente");
         } catch (emailError) {
@@ -554,7 +549,6 @@ export const loanService = {
           console.log("Correo de notificación de devolución tardía enviado exitosamente");
         } else {
           // Si no hay atraso, enviar confirmación normal
-          console.log('Campus de origen que se enviará en el correo:', loan.campus_origen);
           await emailService.sendReturnConfirmation({
             id: Number(id),
             book: {
