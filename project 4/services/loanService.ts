@@ -565,7 +565,8 @@ export const loanService = {
             fecha_devolucion_esperada: loan.fecha_devolucion_esperada,
             fecha_devolucion_real: updateData.fecha_devolucion_real,
             estado: 'devuelto',
-            dias_atraso: updateData.dias_atraso
+            dias_atraso: updateData.dias_atraso,
+            campus_origen: loan.campus_origen
           });
           console.log("Correo de confirmación de devolución enviado exitosamente");
         }
