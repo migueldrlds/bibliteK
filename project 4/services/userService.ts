@@ -15,7 +15,7 @@ export interface User {
   numcontrol?: string;
   Carrera?: string;
   Genero?: string;
-  campus?: string;
+  campus?: string | number | null;
   documentId?: string;
   Estado?: string;
   rol?: string;
@@ -27,7 +27,7 @@ export interface CreateUserData {
   email: string;
   password: string;
   Numcontrol?: string;
-  campus?: string;
+  campus?: string | number | null;
   Genero?: string;
   Carrera?: string;
   Estado?: string;

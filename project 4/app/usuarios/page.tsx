@@ -151,21 +151,15 @@ interface UIUser {
 
 // Definir el esquema de validación para el formulario de creación de usuario
 const createUserSchema = z.object({
-  username: z.string().min(3, {
-    message: "El nombre debe tener al menos 3 caracteres",
-  }),
-  email: z.string().email({
-    message: "Ingrese un correo electrónico válido",
-  }),
-  password: z.string().min(6, {
-    message: "La contraseña debe tener al menos 6 caracteres",
-  }),
-  rol: z.string(),
-  Estado: z.string().default("Activo"),
-  Numcontrol: z.string().optional(),
+  username: z.string().min(1, { message: "El nombre de usuario es obligatorio" }),
+  apellido: z.string().min(1, { message: "El apellido es obligatorio" }),
+  email: z.string().email({ message: "Correo electrónico inválido" }),
+  password: z.string().min(6, { message: "La contraseña debe tener al menos 6 caracteres" }),
+  Numcontrol: z.string().min(1, { message: "La matrícula es obligatoria" }),
   Genero: z.string().optional(),
+  rol: z.string().min(1, { message: "El rol es obligatorio" }),
+  Carrera: z.string().min(1, { message: "La carrera es obligatoria" }),
   campus: z.string().optional(),
-  Carrera: z.string().optional(),
 });
 
 // Schema para editar usuario (sin contraseña obligatoria)
@@ -225,14 +219,13 @@ export default function UsuariosPage() {
     resolver: zodResolver(createUserSchema),
     defaultValues: {
       username: "",
+      apellido: "",
       email: "",
       password: "",
       Numcontrol: "",
       campus: undefined,
       Genero: undefined,
       Carrera: undefined,
-      Estado: "Activo",
-      rol: "Alumno",
     },
   });
 
@@ -308,25 +301,63 @@ export default function UsuariosPage() {
     }
   }, [selectedEditCareerId, careers, editForm]);
 
+  // Cuando cambia la carrera seleccionada en el modal de creación, actualizar el campus automáticamente
+  useEffect(() => {
+    const selectedCareerId = form.getValues("Carrera");
+    if (selectedCareerId && careers.length > 0) {
+      const selectedCareer = careers.find(
+        c => c.id.toString() === selectedCareerId.toString()
+      );
+      const campusId =
+        selectedCareer?.campus?.id?.toString() ||
+        selectedCareer?.attributes?.campus?.data?.id?.toString() ||
+        "";
+      // Actualizar el valor de campus en el formulario de creación
+      form.setValue("campus", campusId);
+    }
+  }, [form.watch("Carrera"), careers, form]);
+
   // Función para crear un nuevo usuario
   const onCreateUser = async (data: CreateUserFormValues) => {
     try {
       setIsCreatingUser(true);
       console.log("Datos del formulario:", data);
 
+      // Validar que se haya seleccionado una carrera
+      if (!data.Carrera) {
+        toast({
+          title: "Error",
+          description: "Debe seleccionar una carrera",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Mapeo de rol a ID de la colección de roles de Strapi
+      const roleMap = {
+        Alumno: "7",
+        Administrador: "5",
+        Interno: "6",
+        Bibliotecario: "8"
+      };
+
       // Adaptar los datos al formato esperado por la API
       const userData = {
         username: data.username,
+        apellido: data.apellido,
         email: data.email,
         password: data.password,
         Numcontrol: data.Numcontrol,
-        campus: data.campus,
         Genero: data.Genero,
-        Carrera: data.Carrera,
-        Estado: data.Estado,
+        Estado: "Activo",
         rol: data.rol,
-        confirmed: true, // Confirmar usuario automáticamente
+        role: roleMap[data.rol as keyof typeof roleMap],
+        confirmed: true,
+        carrera: Number(data.Carrera),
+        campus: data.campus ? Number(data.campus) : undefined,
       };
+
+      console.log("Datos a enviar:", userData);
 
       // Llamar al servicio para crear el usuario
       const newUser = await userService.createUser(userData);
@@ -743,12 +774,13 @@ export default function UsuariosPage() {
       const userData = {
         ...data,
         id: selectedUser.id,
-        // Separar el nombre completo en nombre y apellido
         username: data.username,
         apellido: data.apellido,
         rol: data.rol,
-        role: roleMap[data.rol as keyof typeof roleMap], // ID de la colección de roles de Strapi como string
-        blocked: data.Estado === "Baja", // Bloquear si el estado es Baja
+        role: roleMap[data.rol as keyof typeof roleMap],
+        blocked: data.Estado === "Baja",
+        carrera: data.Carrera ? Number(data.Carrera) : null,
+        campus: data.campus ? Number(data.campus) : null,
       };
       
       // Solo incluir contraseña si se ha proporcionado una nueva
@@ -1045,14 +1077,14 @@ export default function UsuariosPage() {
         {/* Diálogo de creación de usuario - Diseño compacto */}
         <Dialog open={showCreateUserDialog} onOpenChange={setShowCreateUserDialog}>
           <DialogContent className="sm:max-w-[650px] max-h-[90vh] overflow-y-auto">
-            <DialogHeader className="pb-2 border-b">
+            <DialogHeader className="pb-4 border-b">
               <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-full bg-primary/10">
-                  <UserPlus className="h-5 w-5 text-primary" />
+                <div className="p-2 rounded-full bg-blue-100 dark:bg-blue-900/30">
+                  <UserPlus className="h-6 w-6 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div>
-                  <DialogTitle className="text-lg">Crear Nuevo Usuario</DialogTitle>
-                  <DialogDescription className="text-xs">
+                  <DialogTitle className="text-xl">Crear Nuevo Usuario</DialogTitle>
+                  <DialogDescription>
                     Complete la información para registrar un nuevo usuario
                   </DialogDescription>
                 </div>
@@ -1060,277 +1092,265 @@ export default function UsuariosPage() {
             </DialogHeader>
 
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onCreateUser)} className="space-y-4 py-3">
-                {/* Sección: Información Personal y Acceso */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-1 text-primary">
-                    <User className="h-3.5 w-3.5" />
-                    <h3 className="font-medium text-xs">Información Personal y Acceso</h3>
+              <form onSubmit={form.handleSubmit(onCreateUser)} className="space-y-6 py-4">
+                {/* Sección: Información Personal */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 text-blue-600 mb-2">
+                    <User className="h-4 w-4" />
+                    <h3 className="font-medium text-sm">Información Personal</h3>
                   </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {/* Nombre y Número de control */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Nombre */}
                     <FormField
                       control={form.control}
                       name="username"
                       render={({ field }) => (
-                        <FormItem className="space-y-1">
-                          <FormLabel className="text-xs">
-                            Nombre completo <span className="text-rose-500">*</span>
+                        <FormItem>
+                          <FormLabel className="text-sm flex items-center gap-1">
+                            Nombre <span className="text-rose-500">*</span>
                           </FormLabel>
                           <FormControl>
-                            <Input placeholder="Nombre completo" {...field} className="h-8 text-sm" />
+                            <Input placeholder="Nombre(s)" {...field} className="h-9" />
                           </FormControl>
-                          <FormMessage className="text-xs" />
+                          <FormMessage />
                         </FormItem>
                       )}
                     />
+                    {/* Apellido */}
+                    <FormField
+                      control={form.control}
+                      name="apellido"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm flex items-center gap-1">
+                            Apellido <span className="text-rose-500">*</span>
+                          </FormLabel>
+                          <FormControl>
+                            <Input placeholder="Apellido(s)" {...field} className="h-9" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Matrícula */}
                     <FormField
                       control={form.control}
                       name="Numcontrol"
                       render={({ field }) => (
-                        <FormItem className="space-y-1">
-                          <FormLabel className="text-xs">Número de control</FormLabel>
+                        <FormItem>
+                          <FormLabel className="text-sm flex items-center gap-1">
+                            <Fingerprint className="h-3.5 w-3.5 text-muted-foreground" />
+                            Matrícula <span className="text-rose-500">*</span>
+                          </FormLabel>
                           <FormControl>
-                            <Input placeholder="Matrícula o ID" {...field} className="h-8 text-sm" />
+                            <Input placeholder="Número de control" {...field} className="h-9" />
                           </FormControl>
-                          <FormMessage className="text-xs" />
+                          <FormMessage />
                         </FormItem>
                       )}
                     />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {/* Email y Contraseña */}
+                    {/* Email */}
                     <FormField
                       control={form.control}
                       name="email"
                       render={({ field }) => (
-                        <FormItem className="space-y-1">
-                          <FormLabel className="text-xs flex items-center gap-1">
-                            <Mail className="h-3 w-3 text-muted-foreground" />
+                        <FormItem>
+                          <FormLabel className="text-sm flex items-center gap-1">
+                            <Mail className="h-3.5 w-3.5 text-muted-foreground" />
                             Correo electrónico <span className="text-rose-500">*</span>
                           </FormLabel>
                           <FormControl>
-                            <Input type="email" placeholder="correo@ejemplo.com" {...field} className="h-8 text-sm" />
+                            <Input type="email" placeholder="correo@ejemplo.com" {...field} className="h-9" />
                           </FormControl>
-                          <FormMessage className="text-xs" />
+                          <FormMessage />
                         </FormItem>
                       )}
                     />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Contraseña */}
                     <FormField
                       control={form.control}
                       name="password"
                       render={({ field }) => (
-                        <FormItem className="space-y-1">
-                          <FormLabel className="text-xs flex items-center gap-1">
-                            <AlertCircle className="h-3 w-3 text-muted-foreground" />
+                        <FormItem>
+                          <FormLabel className="text-sm flex items-center gap-1">
+                            <Key className="h-3.5 w-3.5 text-muted-foreground" />
                             Contraseña <span className="text-rose-500">*</span>
                           </FormLabel>
                           <FormControl>
-                            <Input type="password" placeholder="Mínimo 6 caracteres" {...field} className="h-8 text-sm" />
+                            <Input type="password" placeholder="Mínimo 6 caracteres" {...field} className="h-9" />
                           </FormControl>
-                          <FormMessage className="text-xs" />
+                          <FormDescription className="text-xs">
+                            La contraseña debe tener al menos 6 caracteres
+                          </FormDescription>
+                          <FormMessage />
                         </FormItem>
                       )}
                     />
                   </div>
                 </div>
-
-                {/* Sección: Rol y Estado */}
-                <div className="pt-2 border-t space-y-3">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {/* Rol */}
-                    <FormField
-                      control={form.control}
-                      name="rol"
-                      render={({ field }) => (
-                        <FormItem className="space-y-1">
-                          <FormLabel className="text-xs">
-                            Rol <span className="text-rose-500">*</span>
-                          </FormLabel>
-                          <Select
-                            onValueChange={field.onChange}
-                            defaultValue={field.value}
-                          >
-                            <FormControl>
-                              <SelectTrigger className="h-8">
-                                <SelectValue placeholder="Seleccionar rol" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="Alumno">
-                                <div className="flex items-center gap-1">
-                                  <School className="h-3 w-3 text-emerald-500" />
-                                  <span className="text-sm">Alumno</span>
-                                </div>
-                              </SelectItem>
-                              <SelectItem value="Interno">
-                                <div className="flex items-center gap-1">
-                                  <BookOpen className="h-3 w-3 text-blue-500" />
-                                  <span className="text-sm">Interno (Maestros/Administrativos)</span>
-                                </div>
-                              </SelectItem>
-                              <SelectItem value="Administrador">
-                                <div className="flex items-center gap-1">
-                                  <User className="h-3 w-3 text-rose-500" />
-                                  <span className="text-sm">Administrador</span>
-                                </div>
-                              </SelectItem>
-                              <SelectItem value="Bibliotecario">
-                                <div className="flex items-center gap-2">
-                                  <BookOpen className="h-3.5 w-3.5 text-yellow-500" />
-                                  <span>Bibliotecario</span>
-                                </div>
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormDescription className="text-[10px]">
-                            Determina los permisos en el sistema
-                          </FormDescription>
-                          <FormMessage className="text-xs" />
-                        </FormItem>
-                      )}
-                    />
-
-                    {/* Estado */}
-                    <FormField
-                      control={form.control}
-                      name="Estado"
-                      render={({ field }) => (
-                        <FormItem className="space-y-1">
-                          <FormLabel className="text-xs">Estado</FormLabel>
-                          <Select
-                            onValueChange={field.onChange}
-                            defaultValue={field.value}
-                          >
-                            <FormControl>
-                              <SelectTrigger className="h-8">
-                                <SelectValue placeholder="Seleccionar estado" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="Activo">
-                                <div className="flex items-center gap-1">
-                                  <CheckCircle2 className="h-3 w-3 text-green-500" />
-                                  <span className="text-sm">Activo</span>
-                                </div>
-                              </SelectItem>
-                              <SelectItem value="Inactivo">
-                                <div className="flex items-center gap-1">
-                                  <AlertCircle className="h-3 w-3 text-amber-500" />
-                                  <span className="text-sm">Inactivo</span>
-                                </div>
-                              </SelectItem>
-                              <SelectItem value="Baja">
-                                <div className="flex items-center gap-2">
-                                  <Trash2 className="h-3 w-3 text-red-500" />
-                                  <span className="text-sm">Baja</span>
-                                </div>
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormDescription className="text-[10px]">
-                            Usuarios activos pueden acceder al sistema
-                          </FormDescription>
-                          <FormMessage className="text-xs" />
-                        </FormItem>
-                      )}
-                    />
+                {/* Sección: Rol y Género */}
+                <div className="border-t pt-4">
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-blue-600 mb-2">
+                      <GraduationCap className="h-4 w-4" />
+                      <h3 className="font-medium text-sm">Rol y Género</h3>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Rol */}
+                      <FormField
+                        control={form.control}
+                        name="rol"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-sm flex items-center gap-1">
+                              Rol <span className="text-rose-500">*</span>
+                            </FormLabel>
+                            <Select
+                              onValueChange={field.onChange}
+                              defaultValue={field.value}
+                            >
+                              <FormControl>
+                                <SelectTrigger className="h-9">
+                                  <SelectValue placeholder="Seleccionar rol" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="Alumno">
+                                  <div className="flex items-center gap-2">
+                                    <School className="h-3.5 w-3.5 text-emerald-500" />
+                                    <span>Alumno</span>
+                                  </div>
+                                </SelectItem>
+                                <SelectItem value="Interno">
+                                  <div className="flex items-center gap-2">
+                                    <BookOpen className="h-3.5 w-3.5 text-blue-500" />
+                                    <span>Interno (Maestros/Administrativos)</span>
+                                  </div>
+                                </SelectItem>
+                                <SelectItem value="Administrador">
+                                  <div className="flex items-center gap-2">
+                                    <User className="h-3.5 w-3.5 text-rose-500" />
+                                    <span>Administrador</span>
+                                  </div>
+                                </SelectItem>
+                                <SelectItem value="Bibliotecario">
+                                  <div className="flex items-center gap-2">
+                                    <BookOpen className="h-3.5 w-3.5 text-yellow-500" />
+                                    <span>Bibliotecario</span>
+                                  </div>
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormDescription className="text-xs">
+                              Determina los permisos en el sistema
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      {/* Género */}
+                      <FormField
+                        control={form.control}
+                        name="Genero"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-sm">Género</FormLabel>
+                            <Select
+                              onValueChange={field.onChange}
+                              defaultValue={field.value}
+                            >
+                              <FormControl>
+                                <SelectTrigger className="h-9">
+                                  <SelectValue placeholder="Seleccionar género" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="Hombre">Hombre</SelectItem>
+                                <SelectItem value="Mujer">Mujer</SelectItem>
+                                <SelectItem value="Otro">Otro</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
                   </div>
                 </div>
-                
                 {/* Sección: Información Adicional */}
-                <div className="pt-2 border-t space-y-3">
-                  <div className="grid grid-cols-3 gap-3">
-                    {/* Campus, Género y Carrera */}
-                    <FormField
-                      control={form.control}
-                      name="campus"
-                      render={({ field }) => (
-                        <FormItem className="space-y-1">
-                          <FormLabel className="text-xs">Campus</FormLabel>
-                          <Select
-                            onValueChange={field.onChange}
-                            defaultValue={field.value}
-                          >
-                            <FormControl>
-                              <SelectTrigger className="h-8">
-                                <SelectValue placeholder="Campus" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {campuses.map((campus) => (
-                                <SelectItem key={campus.id} value={campus.id.toString()}>
-                                  {campus.attributes?.Nombre || campus.Nombre}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage className="text-xs" />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="Genero"
-                      render={({ field }) => (
-                        <FormItem className="space-y-1">
-                          <FormLabel className="text-xs">Género</FormLabel>
-                          <Select
-                            onValueChange={field.onChange}
-                            defaultValue={field.value}
-                          >
-                            <FormControl>
-                              <SelectTrigger className="h-8">
-                                <SelectValue placeholder="Género" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="Hombre">Hombre</SelectItem>
-                              <SelectItem value="Mujer">Mujer</SelectItem>
-                              <SelectItem value="Otro">Otro</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage className="text-xs" />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="Carrera"
-                      render={({ field }) => (
-                        <FormItem className="space-y-1">
-                          <FormLabel className="text-xs">Carrera</FormLabel>
-                          <Select
-                            onValueChange={field.onChange}
-                            defaultValue={field.value}
-                          >
-                            <FormControl>
-                              <SelectTrigger className="h-8">
-                                <SelectValue placeholder="Carrera" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {careers.map((career) => (
-                                <SelectItem key={career.id} value={career.id.toString()}>
-                                  {career.attributes?.Nombre || career.Nombre}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage className="text-xs" />
-                        </FormItem>
-                      )}
-                    />
+                <div className="border-t pt-4">
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-blue-600 mb-2">
+                      <MapPin className="h-4 w-4" />
+                      <h3 className="font-medium text-sm">Información Adicional</h3>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Carrera */}
+                      <FormField
+                        control={form.control}
+                        name="Carrera"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-sm">Carrera</FormLabel>
+                            <Select
+                              onValueChange={field.onChange}
+                              defaultValue={field.value}
+                            >
+                              <FormControl>
+                                <SelectTrigger className="h-9">
+                                  <SelectValue placeholder="Seleccionar carrera" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {careers.map((career) => (
+                                  <SelectItem key={career.id} value={career.id.toString()}>
+                                    {career.attributes?.Nombre || career.Nombre}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      {/* Campus */}
+                      <FormField
+                        control={form.control}
+                        name="campus"
+                        render={({ field }) => {
+                          // Buscar el campus de la carrera seleccionada en el formulario de creación
+                          const selectedCareerId = form.getValues("Carrera");
+                          const selectedCareer = careers.find(
+                            c => c.id.toString() === selectedCareerId?.toString()
+                          );
+                          const campusName =
+                            selectedCareer?.campus?.Nombre ||
+                            selectedCareer?.attributes?.campus?.data?.attributes?.Nombre ||
+                            "Sin unidad";
+                          return (
+                            <FormItem>
+                              <FormLabel className="text-sm">Campus</FormLabel>
+                              <FormControl>
+                                <Input
+                                  value={campusName}
+                                  disabled
+                                  readOnly
+                                  className="h-9"
+                                  placeholder="El campus se asigna automáticamente"
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          );
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
-
-                <div className="flex items-center text-xs text-amber-600 p-2 rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900">
-                  <AlertTriangle className="h-3.5 w-3.5 mr-2 flex-shrink-0" />
-                  <p>Los campos con <span className="text-rose-500">*</span> son obligatorios. Los usuarios podrán iniciar sesión inmediatamente.</p>
-                </div>
-
                 <DialogFooter className="pt-2 border-t flex items-center justify-end gap-2">
                   <Button 
                     type="button" 
@@ -1340,19 +1360,19 @@ export default function UsuariosPage() {
                       form.reset();
                     }}
                     disabled={isCreatingUser}
-                    className="h-8 text-xs"
+                    className="gap-2"
                   >
                     Cancelar
                   </Button>
-                  <Button type="submit" disabled={isCreatingUser} className="h-8 text-xs gap-1">
+                  <Button type="submit" disabled={isCreatingUser} className="gap-2 bg-blue-600 hover:bg-blue-700">
                     {isCreatingUser ? (
                       <>
-                        <Loader2 className="h-3 w-3 animate-spin" />
+                        <Loader2 className="h-4 w-4 animate-spin" />
                         Creando...
                       </>
                     ) : (
                       <>
-                        <UserPlus className="h-3 w-3" />
+                        <UserPlus className="h-4 w-4" />
                         Crear Usuario
                       </>
                     )}
