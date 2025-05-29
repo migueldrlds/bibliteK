@@ -88,6 +88,7 @@ import {
 import { DateRangePicker } from "@/components/reports/date-range-picker";
 import { ReportFilters } from "@/components/reports/report-filters";
 import { ReportExport } from "@/components/reports/report-export";
+import { DateRange } from "react-day-picker";
 
 // Importar loanService para obtener los datos de préstamos
 import { loanService, Loan } from "@/services/loanService";
@@ -285,6 +286,14 @@ async function descargarConsultasCSV() {
     console.log("Iniciando descarga de CSV usando api.ts...");
     // Usar la función que trae todas las páginas
     const consultas = await fetchAllConsultas();
+    // Filtrar por rango de fechas seleccionado
+    const filteredConsultas = consultas.filter((consulta: any) => {
+      if (!dateRange?.from && !dateRange?.to) return true;
+      const fecha = new Date(consulta.fecha || consulta.createdAt);
+      if (dateRange?.from && fecha < dateRange.from) return false;
+      if (dateRange?.to && fecha > dateRange.to) return false;
+      return true;
+    });
     // Procesar los datos a CSV con todos los campos
     const encabezados = [
       "ID", "DocumentID", "Fecha", "IP", "User Agent", 
@@ -295,7 +304,7 @@ async function descargarConsultasCSV() {
       "Usuario ID", "Username", "Email", "Num Control", 
       "Género", "Carrera", "Campus", "Estado", "Rol", "Apellido"
     ];
-    const filas = consultas.map((consulta: any) => {
+    const filas = filteredConsultas.map((consulta: any) => {
       // Acceder a book y user que pueden ser null
       const book = consulta.book || {};
       const user = consulta.user || {};
@@ -358,7 +367,7 @@ async function descargarConsultasCSV() {
       .join("\n");
     // Descargar el archivo
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    saveAs(blob, "consultas_completas.csv");
+    saveAs(blob, "consultas_filtradas.csv");
     // Mensaje de éxito
     console.log("CSV generado exitosamente");
   } catch (apiError: any) {
@@ -377,6 +386,14 @@ async function descargarConsultasExcel() {
     console.log("Iniciando descarga de Excel usando api.ts...");
     // Usar la función que trae todas las páginas con populate para incluir relaciones
     const consultas = await fetchAllConsultas();
+    // Filtrar por rango de fechas seleccionado
+    const filteredConsultas = consultas.filter((consulta: any) => {
+      if (!dateRange?.from && !dateRange?.to) return true;
+      const fecha = new Date(consulta.fecha || consulta.createdAt);
+      if (dateRange?.from && fecha < dateRange.from) return false;
+      if (dateRange?.to && fecha > dateRange.to) return false;
+      return true;
+    });
     
     // Obtener campus y carreras para referencia
     const campusRes = await fetch('http://localhost:1337/api/campuses?populate=*');
@@ -388,7 +405,7 @@ async function descargarConsultasExcel() {
     const careers = careerData.data || careerData;
 
     // Procesar los datos para Excel
-    const filas = consultas.map((consulta: any) => {
+    const filas = filteredConsultas.map((consulta: any) => {
       // Acceder a book y user que pueden ser null
       const book = consulta.book || {};
       const user = consulta.user || {};
@@ -496,7 +513,7 @@ async function descargarConsultasExcel() {
     // Generar y descargar el archivo
     const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
     const blob = new Blob([excelBuffer], { type: "application/octet-stream" });
-    saveAs(blob, "consultas_completas.xlsx");
+    saveAs(blob, "consultas_filtradas.xlsx");
     
     // Mensaje de éxito
     console.log("Excel generado exitosamente");
@@ -1398,14 +1415,26 @@ export default function ReportesPage() {
   const [prestamosDevueltos, setPrestamosDevueltos] = useState(0);
   const [prestamosTotales, setPrestamosTotales] = useState(0);
 
+  // Añadir nuevo estado para el rango de fechas
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: undefined,
+    to: new Date(),
+  });
+  // Estado global para los préstamos
+  const [loans, setLoans] = useState<Loan[]>([]);
+  // Estado para el tipo de rango seleccionado
+  const [quickSelect, setQuickSelect] = useState<string>("custom");
+
+  // Cargar los préstamos una sola vez y guardarlos en loans
   useEffect(() => {
-    // Obtener préstamos utilizando loanService
     const fetchLoans = async () => {
       try {
-        const loans = await loanService.getLoans();
-        const devueltos = loans.filter(loan => loan.estado === 'devuelto').length;
+        const data = await loanService.getLoans();
+        setLoans(data);
+        // También puedes calcular aquí los devueltos si quieres
+        const devueltos = data.filter((loan: Loan) => loan.estado === 'devuelto').length;
         setPrestamosDevueltos(devueltos);
-        setPrestamosTotales(loans.length);
+        setPrestamosTotales(data.length);
       } catch {}
     };
     fetchLoans();
@@ -1438,32 +1467,35 @@ export default function ReportesPage() {
     };
   }, []);
 
-  // Efecto para cargar los datos
+  // Efecto para cargar los datos y estadísticas
   useEffect(() => {
     const obtenerEstadisticas = async () => {
       try {
-        // No realizar la carga de datos si no tiene permisos o si los permisos aún se están cargando
         if (userLoading || !permissions || !permissions.canAccessReportes) {
           return;
         }
-        
         setIsLoading(true);
-        // Obtener préstamos utilizando loanService
-        const loans = await loanService.getLoans();
-        
-        // Calcular el total de préstamos
-        const totalPrestamos = loans.length;
+        // Filtrar préstamos por el rango de fechas seleccionado
+        const filteredLoans = loans.filter((loan: Loan) => {
+          const fechaPrestamo = new Date(loan.fecha_prestamo);
+          return dateRange?.from && dateRange?.to
+            ? fechaPrestamo >= dateRange.from && fechaPrestamo <= dateRange.to
+            : true;
+        });
+
+        // Usar filteredLoans en lugar de loans para todos los cálculos
+        const totalPrestamos = filteredLoans.length;
         
         // Calcular el incremento de préstamos (comparar con el mes anterior)
         const mesActual = new Date().getMonth();
         const mesAnterior = mesActual === 0 ? 11 : mesActual - 1;
         
-        const prestamosEsteMes = loans.filter(loan => {
+        const prestamosEsteMes = filteredLoans.filter(loan => {
           const fechaPrestamo = new Date(loan.fecha_prestamo);
           return fechaPrestamo.getMonth() === mesActual;
         }).length;
         
-        const prestamosMesAnterior = loans.filter(loan => {
+        const prestamosMesAnterior = filteredLoans.filter(loan => {
           const fechaPrestamo = new Date(loan.fecha_prestamo);
           return fechaPrestamo.getMonth() === mesAnterior;
         }).length;
@@ -1481,7 +1513,7 @@ export default function ReportesPage() {
         });
 
         // SEGUNDA TARJETA: Libros prestados actualmente
-        const librosPrestados = loans.filter(loan => loan.estado === 'activo').length;
+        const librosPrestados = filteredLoans.filter(loan => loan.estado === 'activo').length;
         
         // Calcular el incremento semanal
         const hoy = new Date();
@@ -1491,12 +1523,12 @@ export default function ReportesPage() {
         const dosSemanaAtras = new Date(hoy);
         dosSemanaAtras.setDate(hoy.getDate() - 14);
         
-        const prestamosEstaSemana = loans.filter(loan => {
+        const prestamosEstaSemana = filteredLoans.filter(loan => {
           const fechaPrestamo = new Date(loan.fecha_prestamo);
           return fechaPrestamo >= unaSemanaAtras && fechaPrestamo <= hoy && loan.estado === 'activo';
         }).length;
         
-        const prestamosSemanaAnterior = loans.filter(loan => {
+        const prestamosSemanaAnterior = filteredLoans.filter(loan => {
           const fechaPrestamo = new Date(loan.fecha_prestamo);
           return fechaPrestamo >= dosSemanaAtras && fechaPrestamo < unaSemanaAtras && loan.estado === 'activo';
         }).length;
@@ -1557,19 +1589,19 @@ export default function ReportesPage() {
         
         // CUARTA TARJETA: Tasa de devolución
         // Calcular el porcentaje de préstamos devueltos respecto al total
-        const prestamosDevueltos = loans.filter(loan => loan.estado === 'devuelto').length;
-        const prestamosTotales = loans.length;
+        const prestamosDevueltos = filteredLoans.filter(loan => loan.estado === 'devuelto').length;
+        const prestamosTotales = filteredLoans.length;
         const tasaDevolucion = prestamosTotales > 0 
           ? Math.round((prestamosDevueltos / prestamosTotales) * 100) 
           : 0;
         
         // Calcular la tasa del mes anterior para la comparación
-        const prestamosDevueltosMesAnterior = loans.filter(loan => {
+        const prestamosDevueltosMesAnterior = filteredLoans.filter(loan => {
           const fechaDevolucion = new Date(loan.fecha_devolucion_real || loan.updatedAt);
           return fechaDevolucion.getMonth() === mesAnterior && loan.estado === 'devuelto';
         }).length;
         
-        const prestamosTotalesMesAnterior = loans.filter(loan => {
+        const prestamosTotalesMesAnterior = filteredLoans.filter(loan => {
           const fechaPrestamo = new Date(loan.fecha_prestamo);
           return fechaPrestamo.getMonth() === mesAnterior;
         }).length;
@@ -1605,7 +1637,7 @@ export default function ReportesPage() {
         }
         
         // Contar préstamos por mes (últimos 12 meses)
-        loans.forEach(loan => {
+        filteredLoans.forEach(loan => {
           const fechaPrestamo = new Date(loan.fecha_prestamo);
           const mesPrestamo = fechaPrestamo.getMonth();
           const añoPrestamo = fechaPrestamo.getFullYear();
@@ -1671,7 +1703,7 @@ export default function ReportesPage() {
           }> = {};
           
           // Procesar todos los préstamos
-          loans.forEach(loan => {
+          filteredLoans.forEach(loan => {
             if (!loan.usuario) return;
             
             const userId = loan.usuario.id?.toString() || '';
@@ -1729,7 +1761,7 @@ export default function ReportesPage() {
           };
           
           // Procesar todos los préstamos
-          loans.forEach(loan => {
+          filteredLoans.forEach(loan => {
             // Fecha de préstamo
             const fechaPrestamo = new Date(loan.fecha_prestamo);
             const diaPrestamo = diasSemana[fechaPrestamo.getDay()]; // getDay() retorna 0-6 (Domingo-Sábado)
@@ -1770,7 +1802,7 @@ export default function ReportesPage() {
     };
     
     obtenerEstadisticas();
-  }, [userLoading, permissions]);
+  }, [userLoading, permissions, dateRange, loans]); // Añadir dateRange como dependencia
 
   // Resto de funciones del componente (sin cambios)
   const formatDate = (dateString: string) => {
@@ -1894,6 +1926,22 @@ export default function ReportesPage() {
     setDescargandoInventario(false);
   };
 
+  // Crear función para obtener el texto de comparación según quickSelect
+  const getComparativeText = (type: string) => {
+    switch (type) {
+      case "today":
+        return "desde ayer";
+      case "week":
+        return "desde la semana pasada";
+      case "month":
+        return "desde el mes pasado";
+      case "custom":
+        return "comparado con el período anterior";
+      default:
+        return "";
+    }
+  };
+
   // Renderizado condicional DESPUÉS de todos los hooks
   if (userLoading || !permissions) {
     return (
@@ -1919,7 +1967,7 @@ export default function ReportesPage() {
         </div>
         
         <div className="flex flex-wrap items-center gap-2">
-          <DateRangePicker />
+          <DateRangePicker onDateRangeChange={setDateRange} onQuickSelectChange={setQuickSelect} />
           
           <div className="flex items-center gap-2">
             <Button onClick={descargarConsultasCSV} variant="outline">
@@ -1954,7 +2002,7 @@ export default function ReportesPage() {
                 {isLoading ? "Cargando..." : prestamoStats.total}
               </div>
             <p className="text-xs text-muted-foreground">
-                {isLoading ? "Calculando..." : `${prestamoStats.incremento.startsWith('-') ? '' : '+'}${prestamoStats.incremento}% desde el mes pasado`}
+                {isLoading ? "Calculando..." : `${prestamoStats.incremento.startsWith('-') ? '' : '+'}${prestamoStats.incremento}% ${getComparativeText(quickSelect)}`}
             </p>
           </CardContent>
         </Card>
@@ -1977,7 +2025,7 @@ export default function ReportesPage() {
                 {isLoading ? "Cargando..." : librosPrestadosStats.total}
               </div>
             <p className="text-xs text-muted-foreground">
-                {isLoading ? "Calculando..." : `${librosPrestadosStats.incremento.startsWith('-') ? '' : '+'}${librosPrestadosStats.incremento}% desde la semana pasada`}
+                {isLoading ? "Calculando..." : `${librosPrestadosStats.incremento.startsWith('-') ? '' : '+'}${librosPrestadosStats.incremento}% ${getComparativeText(quickSelect)}`}
             </p>
           </CardContent>
         </Card>
@@ -2000,7 +2048,7 @@ export default function ReportesPage() {
                 {isLoading ? "Cargando..." : usuariosActivosStats.total}
               </div>
             <p className="text-xs text-muted-foreground">
-                {isLoading ? "Calculando..." : `${usuariosActivosStats.incremento.startsWith('-') ? '' : '+'}${usuariosActivosStats.incremento}% desde el mes pasado`}
+                {isLoading ? "Calculando..." : `${usuariosActivosStats.incremento.startsWith('-') ? '' : '+'}${usuariosActivosStats.incremento}% ${getComparativeText(quickSelect)}`}
             </p>
           </CardContent>
         </Card>
@@ -2023,7 +2071,7 @@ export default function ReportesPage() {
                 {isLoading ? "Cargando..." : `${tasaDevolucionStats.porcentaje}%`}
               </div>
             <p className="text-xs text-muted-foreground">
-                {isLoading ? "Calculando..." : `${tasaDevolucionStats.incremento.startsWith('-') ? '' : '+'}${tasaDevolucionStats.incremento}% desde el mes pasado`}
+                {isLoading ? "Calculando..." : `${tasaDevolucionStats.incremento.startsWith('-') ? '' : '+'}${tasaDevolucionStats.incremento}% ${getComparativeText(quickSelect)}`}
             </p>
           </CardContent>
         </Card>
