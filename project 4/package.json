@@ -2,11 +2,13 @@
   "name": "nextjs",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "send-reminders": "tsx scripts/sendReturnReminders.ts"
   },
   "dependencies": {
     "@chakra-ui/next-js": "^2.4.2",
@@ -79,5 +81,8 @@
     "vaul": "^0.9.9",
     "xlsx": "^0.18.5",
     "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.4"
   }
 }

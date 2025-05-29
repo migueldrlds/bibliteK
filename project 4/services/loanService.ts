@@ -1,6 +1,7 @@
 import fetchAPI from '../lib/api';
 import { formatISO } from 'date-fns';
 import { bookService } from './bookService';
+import { emailService } from './emailService';
 
 // Definir interfaces para los datos
 export interface Book {
@@ -233,43 +234,54 @@ export const loanService = {
     }
   },
 
-  // Crear un préstamo con gestión de campus
-  createLoan: async (loanData: any): Promise<any> => {
+  // Crear un nuevo préstamo
+  createLoan: async (loanData: LoanData): Promise<any> => {
     try {
       console.log("=== INICIO DE CREACIÓN DE PRÉSTAMO ===");
-      console.log("Datos recibidos para crear préstamo:", loanData);
 
-      // Verificar disponibilidad del libro
-      console.log("Verificando disponibilidad del libro ID:", loanData.book);
-      const book = await bookService.getBook(loanData.book);
-      
-      if (!book) {
-        throw new Error(`Libro con ID ${loanData.book} no encontrado`);
-      }
-
-      // Formatear datos para la API
+      // Preparar los datos del préstamo
       const formattedData = {
         data: {
           book: loanData.book,
           usuario: loanData.usuario,
           fecha_prestamo: loanData.fecha_prestamo,
           fecha_devolucion_esperada: loanData.fecha_devolucion_esperada,
-          estado: loanData.estado,
-          campus_origen: loanData.campus_origen,
-          notas: loanData.notas || '',
-          renewalCount: 0 // Siempre inicializar en 0
+          estado: loanData.estado || 'activo',
+          campus_origen: loanData.campus_origen
         }
       };
-
-      console.log("Datos formateados para crear préstamo:", formattedData);
 
       // Crear el préstamo
       const response = await fetchAPI('/api/loans', {
         method: 'POST',
-        body: JSON.stringify(formattedData)
+        body: JSON.stringify(formattedData),
       });
 
-      console.log("Préstamo creado con respuesta:", response);
+      // Obtener los datos completos del libro y usuario para el correo
+      const bookDetails = await bookService.getBook(loanData.book);
+      const userDetails = await fetchAPI(`/api/users/${loanData.usuario}`);
+
+      // Enviar correo de notificación
+      try {
+        await emailService.sendLoanNotification({
+          id: response.data.id,
+          book: {
+            titulo: bookDetails.titulo,
+            autor: bookDetails.autor
+          },
+          usuario: {
+            email: userDetails.email,
+            username: userDetails.username
+          },
+          fecha_prestamo: loanData.fecha_prestamo,
+          fecha_devolucion_esperada: loanData.fecha_devolucion_esperada,
+          estado: loanData.estado || 'activo'
+        });
+        console.log("Correo de notificación enviado exitosamente");
+      } catch (emailError) {
+        console.error("Error al enviar correo de notificación:", emailError);
+        // No lanzamos el error para no interrumpir la creación del préstamo
+      }
 
       // Actualizar inventario usando bookService
       if (loanData.campus_origen) {
@@ -283,8 +295,6 @@ export const loanService = {
           console.log("Inventario actualizado correctamente con bookService");
         } catch (inventoryError) {
           console.error("Error al actualizar inventario con bookService:", inventoryError);
-          // No lanzamos el error aquí para no interrumpir la creación del préstamo
-          // pero registramos el error para seguimiento
         }
       } else {
         console.warn("No se especificó campus_origen, no se actualizará el inventario");
@@ -313,21 +323,43 @@ export const loanService = {
       if (loanData.fecha_devolucion_esperada !== undefined) formattedData.data.fecha_devolucion_esperada = loanData.fecha_devolucion_esperada;
       if (loanData.fecha_devolucion_real !== undefined) formattedData.data.fecha_devolucion_real = loanData.fecha_devolucion_real;
       if (loanData.estado !== undefined) formattedData.data.estado = loanData.estado;
-      if (loanData.notas !== undefined) formattedData.data.notas = loanData.notas;
-      if (loanData.campus_origen !== undefined) formattedData.data.campus_origen = loanData.campus_origen;
 
-      // Si tenemos el documentId, usarlo en lugar del id numérico
-      const idToUse = documentId || id;
-
-      console.log(`Actualizando préstamo ${documentId ? 'documentId' : 'ID'}: ${idToUse} con datos:`, formattedData);
-      const response = await fetchAPI(`/api/loans/${idToUse}`, {
+      // Actualizar el préstamo
+      const response = await fetchAPI(`/api/loans/${id}`, {
         method: 'PUT',
         body: JSON.stringify(formattedData),
       });
 
+      // Si el estado cambió a "devuelto", enviar correo de confirmación
+      if (loanData.estado === "devuelto" && loanData.usuario && loanData.book) {
+        try {
+          // Obtener los datos completos del libro y usuario para el correo
+          const bookDetails = await bookService.getBook(loanData.book);
+          const userDetails = await fetchAPI(`/api/users/${loanData.usuario}`);
+
+          await emailService.sendReturnReminder({
+            id: Number(id),
+            book: {
+              titulo: bookDetails.titulo,
+              autor: bookDetails.autor
+            },
+            usuario: {
+              email: userDetails.email,
+              username: userDetails.username
+            },
+            fecha_prestamo: loanData.fecha_prestamo || '',
+            fecha_devolucion_esperada: loanData.fecha_devolucion_esperada || '',
+            estado: loanData.estado
+          });
+          console.log("Correo de confirmación de devolución enviado exitosamente");
+        } catch (emailError) {
+          console.error("Error al enviar correo de confirmación:", emailError);
+        }
+      }
+
       return response;
     } catch (error) {
-      console.error(`Error al actualizar préstamo ID ${id}:`, error);
+      console.error("Error al actualizar préstamo:", error);
       throw error;
     }
   },
