@@ -1,9 +1,66 @@
 import { loanService } from '../services/loanService';
 import { emailService } from '../services/emailService';
-import { addDays, isBefore } from 'date-fns';
+import { addDays, isBefore, isAfter, subDays } from 'date-fns';
+import fs from 'fs';
+import path from 'path';
+
+// Interfaz para el registro de envíos
+interface EmailLog {
+  loanId: number;
+  lastSent: string;
+}
+
+// Función para manejar el registro de correos enviados
+const EMAIL_LOG_FILE = path.join(process.cwd(), 'email-log.json');
+
+function loadEmailLog(): EmailLog[] {
+  try {
+    if (fs.existsSync(EMAIL_LOG_FILE)) {
+      const data = fs.readFileSync(EMAIL_LOG_FILE, 'utf-8');
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error('Error al cargar el registro de correos:', error);
+  }
+  return [];
+}
+
+function saveEmailLog(log: EmailLog[]) {
+  try {
+    fs.writeFileSync(EMAIL_LOG_FILE, JSON.stringify(log, null, 2));
+  } catch (error) {
+    console.error('Error al guardar el registro de correos:', error);
+  }
+}
+
+function canSendEmail(loanId: number, emailLog: EmailLog[]): boolean {
+  const lastSent = emailLog.find(log => log.loanId === loanId);
+  if (!lastSent) return true;
+
+  const lastSentDate = new Date(lastSent.lastSent);
+  const oneDayAgo = subDays(new Date(), 1);
+  
+  return isBefore(lastSentDate, oneDayAgo);
+}
+
+function updateEmailLog(loanId: number, emailLog: EmailLog[]) {
+  const existingLog = emailLog.findIndex(log => log.loanId === loanId);
+  if (existingLog !== -1) {
+    emailLog[existingLog].lastSent = new Date().toISOString();
+  } else {
+    emailLog.push({
+      loanId,
+      lastSent: new Date().toISOString()
+    });
+  }
+  saveEmailLog(emailLog);
+}
 
 async function sendReturnReminders() {
   try {
+    // Cargar registro de correos enviados
+    const emailLog = loadEmailLog();
+    
     // Obtener todos los préstamos activos
     const loans = await loanService.getLoans();
     
@@ -20,8 +77,13 @@ async function sendReturnReminders() {
 
     console.log(`Encontrados ${loansToRemind.length} préstamos para recordar`);
 
-    // Enviar recordatorios
+    // Enviar recordatorios solo si no se ha enviado en las últimas 24 horas
     for (const loan of loansToRemind) {
+      if (!canSendEmail(loan.id, emailLog)) {
+        console.log(`Omitiendo envío para préstamo ${loan.id} - Ya se envió un correo en las últimas 24 horas`);
+        continue;
+      }
+
       try {
         await emailService.sendReturnReminder({
           id: loan.id,
@@ -38,6 +100,7 @@ async function sendReturnReminders() {
           estado: loan.estado
         });
         console.log(`Recordatorio enviado para el préstamo ${loan.id}`);
+        updateEmailLog(loan.id, emailLog);
       } catch (error) {
         console.error(`Error al enviar recordatorio para el préstamo ${loan.id}:`, error);
       }
