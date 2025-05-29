@@ -281,7 +281,7 @@ async function fetchAllConsultas(): Promise<any[]> {
 }
 
 // Función para descargar las consultas como CSV
-async function descargarConsultasCSV() {
+async function descargarConsultasCSV(dateRange?: DateRange) {
   try {
     console.log("Iniciando descarga de CSV usando api.ts...");
     // Usar la función que trae todas las páginas
@@ -381,7 +381,7 @@ async function descargarConsultasCSV() {
 }
 
 // Función para descargar las consultas como Excel
-async function descargarConsultasExcel() {
+async function descargarConsultasExcel(dateRange?: DateRange) {
   try {
     console.log("Iniciando descarga de Excel usando api.ts...");
     // Usar la función que trae todas las páginas con populate para incluir relaciones
@@ -2016,13 +2016,13 @@ export default function ReportesPage() {
           <DateRangePicker onDateRangeChange={setDateRange} onQuickSelectChange={setQuickSelect} />
           
           <div className="flex items-center gap-2">
-            <Button onClick={descargarConsultasCSV} variant="outline">
+            <Button onClick={() => { descargarConsultasCSV(dateRange); }} variant="outline">
               Descargar Consultas (CSV)
             </Button>
-            <Button onClick={descargarConsultasExcel} variant="outline">
+            <Button onClick={() => { descargarConsultasExcel(dateRange); }} variant="outline">
               Descargar Consultas (Excel)
             </Button>
-            <Button onClick={generarInformeOficial} variant="outline" className="bg-black text-white hover:bg-neutral-900">
+            <Button onClick={generarInformeOficial} variant="outline" className="bg-black text-white dark:bg-white dark:text-black tec:bg-tec-primary tec:text-white !hover:bg-black !hover:text-white dark:!hover:bg-white dark:!hover:text-black tec:!hover:bg-tec-primary tec:!hover:text-white">
               <FileText className="mr-2 h-4 w-4" />
               Generar Informe Oficial
             </Button>

@@ -11,7 +11,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Library, LayoutDashboard, BookText, BookMarked, Users, BarChart3, LogOut, User, LogIn, BookOpen } from "lucide-react";
+import { Library, LayoutDashboard, BookText, BookMarked, Users, BarChart3, LogOut, User, LogIn, BookOpen, Inbox, DoorOpen, Handshake } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { useUser } from "@/context/user-context";
@@ -29,6 +29,7 @@ type NavigationItem = {
 const permissionMap = {
   dashboard: 'canAccessDashboard',
   catalogo: 'canAccessCatalogo',
+  entradas: 'canAccessEntradas',
   prestamos: 'canAccessPrestamos',
   usuarios: 'canAccessUsuarios',
   reportes: 'canAccessReportes',
@@ -37,7 +38,8 @@ const permissionMap = {
 const navigationItems: NavigationItem[] = [
   { href: "/dashboard", label: "Inicio", icon: <LayoutDashboard className="h-4 w-4" />, permissionKey: 'dashboard' },
   { href: "/catalogo", label: "Catálogo", icon: <BookText className="h-4 w-4" />, permissionKey: 'catalogo' },
-  { href: "/prestamos", label: "Préstamos", icon: <BookMarked className="h-4 w-4" />, permissionKey: 'prestamos' },
+  { href: "/entradas", label: "Entradas", icon: <DoorOpen className="h-4 w-4" />, permissionKey: 'entradas' },
+  { href: "/prestamos", label: "Préstamos", icon: <Handshake className="h-4 w-4" />, permissionKey: 'prestamos' },
   { href: "/usuarios", label: "Usuarios", icon: <Users className="h-4 w-4" />, permissionKey: 'usuarios' },
   { href: "/reportes", label: "Reportes", icon: <BarChart3 className="h-4 w-4" />, permissionKey: 'reportes' },
 ];
@@ -190,15 +192,6 @@ export function Header() {
                 <Link href="/auth/login" className="flex items-center gap-2">
                   <LogIn className="h-4 w-4" />
                   <span>Iniciar sesión</span>
-                </Link>
-              </Button>
-            )}
-
-            {(user?.role?.toLowerCase() === 'administrador' || user?.role?.toLowerCase() === 'bibliotecario') && (
-              <Button asChild variant={pathname === '/entradas' ? 'secondary' : 'ghost'} size="sm">
-                <Link href="/entradas">
-                  <BookOpen className="mr-2 h-4 w-4" />
-                  Entradas
                 </Link>
               </Button>
             )}
