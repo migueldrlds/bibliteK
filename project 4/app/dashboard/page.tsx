@@ -503,10 +503,10 @@ export default function DashboardPage() {
   const handleCreateLoan = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!selectedNewLoanBook || !selectedNewLoanUser) {
+    if (!selectedNewLoanBook || !selectedNewLoanUser || !newLoanCampus) {
       toast({
         title: "Error",
-        description: "Por favor selecciona un libro y un usuario",
+        description: "Por favor selecciona un libro, un usuario y un campus",
         variant: "destructive",
       });
       return;

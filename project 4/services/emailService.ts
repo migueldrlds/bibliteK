@@ -157,6 +157,7 @@ export const emailService = {
   // Enviar correo de confirmación de devolución
   sendReturnConfirmation: async (loanData: LoanData) => {
     try {
+      console.log('Valor de campus_origen en sendReturnConfirmation:', loanData.campus_origen);
       const isLate = loanData.dias_atraso && loanData.dias_atraso > 0;
       const returnStatus = isLate ? 'Fuera de plazo' : 'En plazo';
 
