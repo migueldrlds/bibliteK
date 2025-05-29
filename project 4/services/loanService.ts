@@ -391,6 +391,61 @@ export const loanService = {
         method: 'PUT',
         body: JSON.stringify({ data: updateData }),
       });
+
+      // Enviar correo de confirmación de renovación
+      try {
+        // Obtener los datos completos del libro y usuario para el correo
+        let bookDetails;
+        let userDetails;
+
+        if (typeof loan.book === 'object') {
+          // Si tenemos el objeto libro completo, usar sus datos directamente
+          bookDetails = loan.book;
+          userDetails = loan.usuario;
+        } else {
+          // Si solo tenemos IDs, obtener los detalles
+          const bookId = loan.book;
+          const userId = loan.usuario;
+          
+          // Intentar obtener el libro usando el ID o documentId
+          const bookResponse = await fetchAPI(`/api/books/${bookId}?populate=*`);
+          if (bookResponse && bookResponse.data) {
+            bookDetails = bookResponse.data;
+          }
+          
+          // Obtener detalles del usuario
+          const userResponse = await fetchAPI(`/api/users/${userId}`);
+          if (userResponse && userResponse.data) {
+            userDetails = userResponse.data;
+          }
+        }
+
+        if (!bookDetails || !userDetails) {
+          throw new Error('No se pudieron obtener los detalles del libro o usuario');
+        }
+
+        await emailService.sendRenewalConfirmation({
+          id: Number(id),
+          book: {
+            titulo: bookDetails.titulo,
+            autor: bookDetails.autor,
+            clasificacion: bookDetails.clasificacion,
+            categoria: bookDetails.categoria
+          },
+          usuario: {
+            email: userDetails.email,
+            username: userDetails.username
+          },
+          fecha_prestamo: loan.fecha_prestamo,
+          fecha_devolucion_esperada: newReturnDate,
+          estado: 'renovado',
+          campus_origen: loan.campus_origen,
+          renewalCount: newRenewalCount
+        });
+        console.log("Correo de confirmación de renovación enviado exitosamente");
+      } catch (emailError) {
+        console.error("Error al enviar correo de confirmación de renovación:", emailError);
+      }
       
       console.log('Préstamo renovado:', response);
       return response;
@@ -442,28 +497,78 @@ export const loanService = {
       // Enviar correo de confirmación de devolución
       try {
         // Obtener los datos completos del libro y usuario para el correo
-        const bookDetails = await bookService.getBook(loan.book);
-        const userDetails = await fetchAPI(`/api/users/${loan.usuario}`);
+        let bookDetails;
+        let userDetails;
 
-        await emailService.sendReturnConfirmation({
-          id: Number(id),
-          book: {
-            titulo: bookDetails.titulo,
-            autor: bookDetails.autor,
-            clasificacion: bookDetails.clasificacion,
-            categoria: bookDetails.categoria
-          },
-          usuario: {
-            email: userDetails.email,
-            username: userDetails.username
-          },
-          fecha_prestamo: loan.fecha_prestamo,
-          fecha_devolucion_esperada: loan.fecha_devolucion_esperada,
-          fecha_devolucion_real: updateData.fecha_devolucion_real,
-          estado: 'devuelto',
-          dias_atraso: updateData.dias_atraso
-        });
-        console.log("Correo de confirmación de devolución enviado exitosamente");
+        if (typeof loan.book === 'object') {
+          // Si tenemos el objeto libro completo, usar sus datos directamente
+          bookDetails = loan.book;
+          userDetails = loan.usuario;
+        } else {
+          // Si solo tenemos IDs, obtener los detalles
+          const bookId = loan.book;
+          const userId = loan.usuario;
+          
+          // Intentar obtener el libro usando el ID o documentId
+          const bookResponse = await fetchAPI(`/api/books/${bookId}?populate=*`);
+          if (bookResponse && bookResponse.data) {
+            bookDetails = bookResponse.data;
+          }
+          
+          // Obtener detalles del usuario
+          const userResponse = await fetchAPI(`/api/users/${userId}`);
+          if (userResponse && userResponse.data) {
+            userDetails = userResponse.data;
+          }
+        }
+
+        if (!bookDetails || !userDetails) {
+          throw new Error('No se pudieron obtener los detalles del libro o usuario');
+        }
+
+        // Si hay días de atraso, enviar notificación de devolución tardía
+        if (updateData.dias_atraso && updateData.dias_atraso > 0) {
+          await emailService.sendLateReturnNotification({
+            id: Number(id),
+            book: {
+              titulo: bookDetails.titulo,
+              autor: bookDetails.autor,
+              clasificacion: bookDetails.clasificacion,
+              categoria: bookDetails.categoria
+            },
+            usuario: {
+              email: userDetails.email,
+              username: userDetails.username
+            },
+            fecha_prestamo: loan.fecha_prestamo,
+            fecha_devolucion_esperada: loan.fecha_devolucion_esperada,
+            fecha_devolucion_real: updateData.fecha_devolucion_real,
+            estado: 'devuelto',
+            dias_atraso: updateData.dias_atraso
+          });
+          console.log("Correo de notificación de devolución tardía enviado exitosamente");
+        } else {
+          // Si no hay atraso, enviar confirmación normal
+          await emailService.sendReturnConfirmation({
+            id: Number(id),
+            book: {
+              titulo: bookDetails.titulo,
+              autor: bookDetails.autor,
+              clasificacion: bookDetails.clasificacion,
+              categoria: bookDetails.categoria
+            },
+            usuario: {
+              email: userDetails.email,
+              username: userDetails.username
+            },
+            fecha_prestamo: loan.fecha_prestamo,
+            fecha_devolucion_esperada: loan.fecha_devolucion_esperada,
+            fecha_devolucion_real: updateData.fecha_devolucion_real,
+            estado: 'devuelto',
+            dias_atraso: updateData.dias_atraso
+          });
+          console.log("Correo de confirmación de devolución enviado exitosamente");
+        }
       } catch (emailError) {
         console.error("Error al enviar correo de confirmación:", emailError);
       }
@@ -474,7 +579,18 @@ export const loanService = {
           // Primero intentar usar bookService que ahora funciona correctamente
           try {
             if (loan.book) {
-              const bookIdToUse = loan.book.documentId || loan.book.id;
+              // Obtener el ID correcto del libro
+              let bookIdToUse;
+              if (typeof loan.book === 'object') {
+                // Si tenemos el objeto libro completo, usar su documentId o id
+                bookIdToUse = loan.book.documentId || loan.book.id;
+              } else {
+                // Si solo tenemos el ID, usarlo directamente
+                bookIdToUse = loan.book;
+              }
+
+              console.log(`Intentando actualizar inventario con bookId: ${bookIdToUse}`);
+              
               await bookService.updateBookInventory(
                 bookIdToUse,
                 loan.campus_origen,
@@ -484,7 +600,8 @@ export const loanService = {
               return response;
             }
           } catch (bookServiceError) {
-            console.error("Error al actualizar con bookService, intentando método alternativo:", bookServiceError);
+            console.error("Error al actualizar con bookService:", bookServiceError);
+            // Continuar con el método alternativo
           }
           
           // Si falla bookService, continuamos con el método anterior

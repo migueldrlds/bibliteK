@@ -559,52 +559,70 @@ export const bookService = {
       let retryCount = 0;
       const maxRetries = 3;
       
-      while (retryCount < maxRetries) {
+      // Primero intentar obtener el libro directamente
+      try {
+        const url = `/api/books/${bookId}?populate=*`;
+        console.log(`Intentando obtener libro directamente: ${url}`);
+        const response = await fetchAPI(url);
+        if (response && response.data) {
+          const bookData = response.data.attributes 
+            ? { id: response.data.id, ...response.data.attributes }
+            : response.data;
+          book = mapBookData(bookData);
+        }
+      } catch (error) {
+        console.log("No se pudo obtener el libro directamente, intentando otros métodos...");
+      }
+
+      // Si no se encontró el libro, intentar búsqueda por id_libro
+      if (!book) {
         try {
-          book = await bookService.getBook(bookId);
-          if (book) break;
+          console.log(`Buscando libro por id_libro: ${bookId}`);
+          const searchUrl = `/api/books?filters[id_libro][$eq]=${bookId}&populate=*`;
+          const searchResponse = await fetchAPI(searchUrl);
           
-          console.log(`Intento ${retryCount + 1} de ${maxRetries} para obtener el libro`);
-          retryCount++;
-          if (retryCount < maxRetries) {
-            await new Promise(resolve => setTimeout(resolve, 1000 * retryCount)); // Espera exponencial
+          if (searchResponse && searchResponse.data && Array.isArray(searchResponse.data) && searchResponse.data.length > 0) {
+            const bookData = searchResponse.data[0].attributes 
+              ? { id: searchResponse.data[0].id, ...searchResponse.data[0].attributes }
+              : searchResponse.data[0];
+            book = mapBookData(bookData);
           }
         } catch (error) {
-          console.error(`Error en intento ${retryCount + 1} de obtener libro:`, error);
-          retryCount++;
-          if (retryCount < maxRetries) {
-            await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+          console.error("Error en búsqueda por id_libro:", error);
+        }
+      }
+
+      // Si aún no se encuentra el libro, intentar búsqueda por título
+      if (!book) {
+        try {
+          console.log("Intentando búsqueda por título...");
+          const allBooksResponse = await fetchAPI('/api/books?populate=*');
+          if (allBooksResponse && allBooksResponse.data && Array.isArray(allBooksResponse.data)) {
+            const foundBook = allBooksResponse.data.find(b => 
+              String(b.id) === String(bookId) || 
+              String(b.attributes?.id) === String(bookId) ||
+              String(b.id_libro) === String(bookId) ||
+              String(b.attributes?.id_libro) === String(bookId)
+            );
+            
+            if (foundBook) {
+              const bookData = foundBook.attributes 
+                ? { id: foundBook.id, ...foundBook.attributes }
+                : foundBook;
+              book = mapBookData(bookData);
+            }
           }
+        } catch (error) {
+          console.error("Error en búsqueda por título:", error);
         }
       }
       
       if (!book) {
-        console.error(`No se pudo obtener el libro después de ${maxRetries} intentos`);
-        // Intentar una última búsqueda por id_libro
-        try {
-          console.log(`Realizando búsqueda final por id_libro: ${bookId}`);
-          const url = `/api/books?filters[id_libro][$eq]=${bookId}&populate=*`;
-          const response = await fetchAPI(url);
-          
-          if (response && response.data && Array.isArray(response.data) && response.data.length > 0) {
-            const bookData = response.data[0].attributes 
-              ? { id: response.data[0].id, ...response.data[0].attributes }
-              : response.data[0];
-            book = mapBookData(bookData);
-            if (book) {
-              console.log("Libro encontrado en búsqueda final por id_libro:", book.titulo);
-            }
-          }
-        } catch (error) {
-          console.error("Error en búsqueda final por id_libro:", error);
-        }
-        
-        if (!book) {
-          return { 
-            error: `No se pudo encontrar el libro con ID ${bookId} después de todos los intentos`,
-            success: false
-          };
-        }
+        console.error(`No se pudo encontrar el libro con ID ${bookId} después de todos los intentos`);
+        return { 
+          error: `No se pudo encontrar el libro con ID ${bookId}`,
+          success: false
+        };
       }
       
       if (!book.documentId) {
@@ -621,32 +639,12 @@ export const bookService = {
       const url = `/api/inventories?filters[Campus]=${encodeURIComponent(campus)}&filters[book][documentId]=${book.documentId}`;
       console.log(`Buscando inventarios para: ${url}`);
       
-      let inventoriesResponse;
-      retryCount = 0;
-      
-      while (retryCount < maxRetries) {
-        try {
-          inventoriesResponse = await fetchAPI(url);
-          if (inventoriesResponse) break;
-          
-          console.log(`Intento ${retryCount + 1} de ${maxRetries} para obtener inventarios`);
-          retryCount++;
-          if (retryCount < maxRetries) {
-            await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
-          }
-        } catch (error) {
-          console.error(`Error en intento ${retryCount + 1} de obtener inventarios:`, error);
-          retryCount++;
-          if (retryCount < maxRetries) {
-            await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
-          }
-        }
-      }
+      const inventoriesResponse = await fetchAPI(url);
       
       if (!inventoriesResponse) {
-        console.error(`No se pudieron obtener los inventarios después de ${maxRetries} intentos`);
+        console.error(`No se pudieron obtener los inventarios`);
         return { 
-          error: `No se pudieron obtener los inventarios después de ${maxRetries} intentos`,
+          error: `No se pudieron obtener los inventarios`,
           success: false
         };
       }
@@ -665,7 +663,7 @@ export const bookService = {
           console.log("Cantidad:", inv.Cantidad);
         });
         
-        // Si hay inventarios existentes, actualizar el primero (aunque su cantidad sea 0)
+        // Si hay inventarios existentes, actualizar el primero
         if (inventories.length > 0) {
           const inventoryToUpdate = inventories[0];
           const inventoryDocId = inventoryToUpdate.documentId || inventoryToUpdate.id;
@@ -679,7 +677,7 @@ export const bookService = {
               body: JSON.stringify({
                 data: {
                   Cantidad: newQuantity,
-                  book: book.documentId // Asegurarnos de que el libro esté asociado
+                  book: book.documentId
                 }
               }),
             });
