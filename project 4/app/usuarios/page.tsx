@@ -210,7 +210,7 @@ export default function UsuariosPage() {
   const [users, setUsers] = useState<UIUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(true);
-  const { permissions, isAuthenticated, loading: permissionsLoading } = useUser();
+  const { permissions, isAuthenticated, loading: permissionsLoading, user } = useUser();
   const router = useRouter();
   const [showCreateUserDialog, setShowCreateUserDialog] = useState(false);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
@@ -218,6 +218,7 @@ export default function UsuariosPage() {
   const [campuses, setCampuses] = useState<any[]>([]);
   const [careers, setCareers] = useState<any[]>([]);
   const [selectedEditCareerId, setSelectedEditCareerId] = useState<string>("");
+  const [showPermanentDeleteDialog, setShowPermanentDeleteDialog] = useState(false);
 
   // Configurar el formulario de creación de usuario con React Hook Form
   const form = useForm<CreateUserFormValues>({
@@ -566,6 +567,7 @@ export default function UsuariosPage() {
       alumno: "bg-blue-500 hover:bg-blue-600",
       administrador: "bg-rose-500 hover:bg-rose-600",
       interno: "bg-emerald-500 hover:bg-emerald-600",
+      bibliotecario: "bg-yellow-500 hover:bg-yellow-600",
       authenticated: "bg-gray-500 hover:bg-gray-600",
     };
 
@@ -573,6 +575,7 @@ export default function UsuariosPage() {
       alumno: "Alumno",
       administrador: "Administrador",
       interno: "Interno",
+      bibliotecario: "Bibliotecario",
       authenticated: "Usuario",
     };
 
@@ -630,10 +633,86 @@ export default function UsuariosPage() {
     }
   };
 
-  const handleDeleteUser = () => {
-    // Here would go the logic to delete the user
-    setShowDeleteDialog(false);
-    setSelectedUser(null);
+  const handleDeleteUser = async () => {
+    if (!selectedUser) return;
+    
+    try {
+      // Si el usuario está dado de baja, lo reactivamos
+      if (selectedUser.status === "baja") {
+        await userService.updateUser(selectedUser.id, {
+          Estado: "Activo",
+          blocked: false
+        });
+        
+        toast({
+          title: "Usuario reactivado",
+          description: `El usuario ${selectedUser.fullName} ha sido reactivado correctamente`,
+        });
+      } else {
+        // Si el usuario está activo, lo damos de baja
+        await userService.updateUser(selectedUser.id, {
+          Estado: "Baja",
+          blocked: true
+        });
+        
+        toast({
+          title: "Usuario dado de baja",
+          description: `El usuario ${selectedUser.fullName} ha sido dado de baja correctamente`,
+        });
+      }
+      
+      // Actualizar la lista de usuarios
+      const response = await userService.getUsers();
+      const transformedUsers: UIUser[] = response.map((user: any) => {
+        let status = "activo";
+        if (user.Estado) {
+          status = user.Estado.toLowerCase();
+        } else if (user.blocked) {
+          status = "inactivo";
+        } else if (!user.confirmed) {
+          status = "pendiente";
+        }
+        
+        return {
+          ...user,
+          fullName: user.username || 'Sin nombre',
+          apellido: user.apellido || '',
+          campus: user.campus || undefined,
+          carrera: user.carrera || undefined,
+          careerId: typeof user.carrera === 'object' && user.carrera !== null
+            ? user.carrera.id?.toString() || ''
+            : user.carrera?.toString() || '',
+          status,
+          Estado: user.Estado,
+          numcontrol: user.Numcontrol || user.numcontrol || '',
+          email: user.email || '',
+          rol: user.rol || '',
+          createdAt: user.createdAt || '',
+          career: typeof user.carrera === 'object' && user.carrera !== null
+            ? user.carrera.Nombre || ''
+            : '',
+          gender: user.Genero?.toLowerCase() || (Math.random() > 0.5 ? "masculino" : "femenino"),
+          Genero: user.Genero || '',
+          stats: {
+            totalLoans: Math.floor(Math.random() * 15),
+            activeLoans: Math.floor(Math.random() * 3),
+            overdueLoans: Math.floor(Math.random() * 2),
+            lastActivity: new Date(Date.now() - Math.floor(Math.random() * 30) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          }
+        };
+      });
+      
+      setUsers(transformedUsers);
+      setShowDeleteDialog(false);
+      setSelectedUser(null);
+    } catch (error) {
+      console.error("Error al cambiar el estado del usuario:", error);
+      toast({
+        title: "Error",
+        description: "No se pudo cambiar el estado del usuario",
+        variant: "destructive",
+      });
+    }
   };
 
   const formatDate = (date: string) => {
@@ -654,9 +733,10 @@ export default function UsuariosPage() {
 
       // Mapeo de rol a ID de la colección de roles de Strapi
       const roleMap = {
-        Alumno: 7,
-        Administrador: 5,
-        Interno: 6,
+        Alumno: "7",
+        Administrador: "5",
+        Interno: "6",
+        Bibliotecario: "8"
       };
 
       // Adaptar los datos al formato esperado por la API
@@ -667,7 +747,7 @@ export default function UsuariosPage() {
         username: data.username,
         apellido: data.apellido,
         rol: data.rol,
-        role: roleMap[data.rol as keyof typeof roleMap], // ID de la colección de roles de Strapi
+        role: roleMap[data.rol as keyof typeof roleMap], // ID de la colección de roles de Strapi como string
         blocked: data.Estado === "Baja", // Bloquear si el estado es Baja
       };
       
@@ -747,6 +827,66 @@ export default function UsuariosPage() {
   console.log("careers:", careers);
   console.log("Valor Carrera en form:", editForm.getValues("Carrera"));
 
+  // Función para eliminar usuario permanentemente
+  const handlePermanentDeleteUser = async () => {
+    if (!selectedUser) return;
+    try {
+      await userService.deleteUser(selectedUser.id);
+      toast({
+        title: "Usuario eliminado",
+        description: `El usuario ${selectedUser.fullName} ha sido eliminado permanentemente`,
+      });
+      // Actualizar la lista de usuarios
+      const response = await userService.getUsers();
+      const transformedUsers: UIUser[] = response.map((user: any) => {
+        let status = "activo";
+        if (user.Estado) {
+          status = user.Estado.toLowerCase();
+        } else if (user.blocked) {
+          status = "inactivo";
+        } else if (!user.confirmed) {
+          status = "pendiente";
+        }
+        return {
+          ...user,
+          fullName: user.username || 'Sin nombre',
+          apellido: user.apellido || '',
+          campus: user.campus || undefined,
+          carrera: user.carrera || undefined,
+          careerId: typeof user.carrera === 'object' && user.carrera !== null
+            ? user.carrera.id?.toString() || ''
+            : user.carrera?.toString() || '',
+          status,
+          Estado: user.Estado,
+          numcontrol: user.Numcontrol || user.numcontrol || '',
+          email: user.email || '',
+          rol: user.rol || '',
+          createdAt: user.createdAt || '',
+          career: typeof user.carrera === 'object' && user.carrera !== null
+            ? user.carrera.Nombre || ''
+            : '',
+          gender: user.Genero?.toLowerCase() || (Math.random() > 0.5 ? "masculino" : "femenino"),
+          Genero: user.Genero || '',
+          stats: {
+            totalLoans: Math.floor(Math.random() * 15),
+            activeLoans: Math.floor(Math.random() * 3),
+            overdueLoans: Math.floor(Math.random() * 2),
+            lastActivity: new Date(Date.now() - Math.floor(Math.random() * 30) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          }
+        };
+      });
+      setUsers(transformedUsers);
+      setShowPermanentDeleteDialog(false);
+      setSelectedUser(null);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "No se pudo eliminar el usuario",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -780,6 +920,9 @@ export default function UsuariosPage() {
               <TabsTrigger value="Administrador" className="rounded-md px-3 py-1 text-sm font-medium">
                 Administradores
               </TabsTrigger>
+              <TabsTrigger value="Bibliotecario" className="rounded-md px-3 py-1 text-sm font-medium">
+                Bibliotecarios
+              </TabsTrigger>
             </TabsList>
           </Tabs>
 
@@ -812,18 +955,18 @@ export default function UsuariosPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredUsers.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell className="font-medium">{user.id}</TableCell>
-                  <TableCell>{user.fullName} {user.apellido || ''}</TableCell>
-                  <TableCell>{user.Genero || '-'}</TableCell>
-                  <TableCell>{user.numcontrol || '-'}</TableCell>
-                  <TableCell>{user.email}</TableCell>
-                  <TableCell>{user.career || "-"}</TableCell>
-                  <TableCell>{user.campus?.Nombre || '-'}</TableCell>
-                  <TableCell>{getRoleBadge(user.rol)}</TableCell>
-                  <TableCell>{getStatusBadge(user.status)}</TableCell>
-                  <TableCell>{formatDate(user.createdAt)}</TableCell>
+              {filteredUsers.map((rowUser) => (
+                <TableRow key={rowUser.id}>
+                  <TableCell className="font-medium">{rowUser.id}</TableCell>
+                  <TableCell>{rowUser.fullName} {rowUser.apellido || ''}</TableCell>
+                  <TableCell>{rowUser.Genero || '-'}</TableCell>
+                  <TableCell>{rowUser.numcontrol || '-'}</TableCell>
+                  <TableCell>{rowUser.email}</TableCell>
+                  <TableCell>{rowUser.career || "-"}</TableCell>
+                  <TableCell>{rowUser.campus?.Nombre || '-'}</TableCell>
+                  <TableCell>{getRoleBadge(rowUser.rol)}</TableCell>
+                  <TableCell>{getStatusBadge(rowUser.status)}</TableCell>
+                  <TableCell>{formatDate(rowUser.createdAt)}</TableCell>
                   <TableCell className="text-center">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -835,7 +978,7 @@ export default function UsuariosPage() {
                         <DropdownMenuLabel>Acciones</DropdownMenuLabel>
                         <DropdownMenuItem
                           onClick={() => {
-                            setSelectedUser(user);
+                            setSelectedUser(rowUser);
                             setShowDetailsDialog(true);
                           }}
                         >
@@ -844,7 +987,7 @@ export default function UsuariosPage() {
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => {
-                            setSelectedUser(user);
+                            setSelectedUser(rowUser);
                             setShowEditDialog(true);
                           }}
                         >
@@ -852,16 +995,44 @@ export default function UsuariosPage() {
                           Editar
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive"
-                          onClick={() => {
-                            setSelectedUser(user);
-                            setShowDeleteDialog(true);
-                          }}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Eliminar
-                        </DropdownMenuItem>
+                        {rowUser.status === "baja" ? (
+                          <DropdownMenuItem
+                            className="text-emerald-600 focus:text-emerald-600"
+                            onClick={() => {
+                              setSelectedUser(rowUser);
+                              setShowDeleteDialog(true);
+                            }}
+                          >
+                            <RefreshCw className="mr-2 h-4 w-4" />
+                            Reactivar
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem
+                            className="text-amber-600 focus:text-amber-600"
+                            onClick={() => {
+                              setSelectedUser(rowUser);
+                              setShowDeleteDialog(true);
+                            }}
+                          >
+                            <AlertTriangle className="mr-2 h-4 w-4" />
+                            Dar de baja
+                          </DropdownMenuItem>
+                        )}
+                        {user?.role?.toLowerCase() === "administrador" && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-red-600 focus:text-red-600"
+                              onClick={() => {
+                                setSelectedUser(rowUser);
+                                setShowPermanentDeleteDialog(true);
+                              }}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Eliminar usuario
+                            </DropdownMenuItem>
+                          </>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -997,13 +1168,19 @@ export default function UsuariosPage() {
                               <SelectItem value="Interno">
                                 <div className="flex items-center gap-1">
                                   <BookOpen className="h-3 w-3 text-blue-500" />
-                                  <span className="text-sm">Interno</span>
+                                  <span className="text-sm">Interno (Maestros/Administrativos)</span>
                                 </div>
                               </SelectItem>
                               <SelectItem value="Administrador">
                                 <div className="flex items-center gap-1">
                                   <User className="h-3 w-3 text-rose-500" />
                                   <span className="text-sm">Administrador</span>
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="Bibliotecario">
+                                <div className="flex items-center gap-2">
+                                  <BookOpen className="h-3.5 w-3.5 text-yellow-500" />
+                                  <span>Bibliotecario</span>
                                 </div>
                               </SelectItem>
                             </SelectContent>
@@ -1299,24 +1476,29 @@ export default function UsuariosPage() {
             <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                  <AlertDialogTitle>
+                    {selectedUser?.status === "baja" ? "¿Reactivar usuario?" : "¿Dar de baja al usuario?"}
+                  </AlertDialogTitle>
                   <AlertDialogDescription>
-                    Esta acción no se puede deshacer. Esto eliminará permanentemente
-                    la cuenta de usuario y todos los datos asociados.
+                    {selectedUser?.status === "baja" 
+                      ? "Esta acción cambiará el estado del usuario a 'Activo'. El usuario podrá acceder al sistema nuevamente."
+                      : "Esta acción cambiará el estado del usuario a 'Baja'. El usuario no podrá acceder al sistema pero sus datos se mantendrán en el sistema por motivos de registro."}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <div className="bg-muted p-3 rounded-md text-sm">
-                  <div className="font-medium">{selectedUser.fullName}</div>
-                  <div className="text-muted-foreground">{selectedUser.email}</div>
-                  <div className="text-muted-foreground">ID: {selectedUser.numcontrol || selectedUser.id}</div>
+                  <div className="font-medium">{selectedUser?.fullName}</div>
+                  <div className="text-muted-foreground">{selectedUser?.email}</div>
+                  <div className="text-muted-foreground">ID: {selectedUser?.numcontrol || selectedUser?.id}</div>
                 </div>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancelar</AlertDialogCancel>
                   <AlertDialogAction
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    className={selectedUser?.status === "baja" 
+                      ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                      : "bg-amber-600 text-white hover:bg-amber-700"}
                     onClick={handleDeleteUser}
                   >
-                    Eliminar
+                    {selectedUser?.status === "baja" ? "Reactivar" : "Dar de baja"}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -1505,7 +1687,7 @@ export default function UsuariosPage() {
                                     <SelectItem value="Interno">
                                       <div className="flex items-center gap-2">
                                         <BookOpen className="h-3.5 w-3.5 text-blue-500" />
-                                        <span>Interno</span>
+                                        <span>Interno (Maestros/Administrativos)</span>
                                       </div>
                                     </SelectItem>
                                     <SelectItem value="Administrador">
@@ -1514,55 +1696,16 @@ export default function UsuariosPage() {
                                         <span>Administrador</span>
                                       </div>
                                     </SelectItem>
+                                    <SelectItem value="Bibliotecario">
+                                      <div className="flex items-center gap-2">
+                                        <BookOpen className="h-3.5 w-3.5 text-yellow-500" />
+                                        <span>Bibliotecario</span>
+                                      </div>
+                                    </SelectItem>
                                   </SelectContent>
                                 </Select>
                                 <FormDescription className="text-xs">
                                   Determina los permisos en el sistema
-                                </FormDescription>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-
-                          {/* Estado */}
-                          <FormField
-                            control={editForm.control}
-                            name="Estado"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel className="text-sm">Estado</FormLabel>
-                                <Select
-                                  onValueChange={field.onChange}
-                                  value={field.value}
-                                >
-                                  <FormControl>
-                                    <SelectTrigger className="h-9">
-                                      <SelectValue placeholder="Seleccionar estado" />
-                                    </SelectTrigger>
-                                  </FormControl>
-                                  <SelectContent>
-                                    <SelectItem value="Activo">
-                                      <div className="flex items-center gap-2">
-                                        <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-                                        <span>Activo</span>
-                                      </div>
-                                    </SelectItem>
-                                    <SelectItem value="Inactivo">
-                                      <div className="flex items-center gap-2">
-                                        <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
-                                        <span>Inactivo</span>
-                                      </div>
-                                    </SelectItem>
-                                    <SelectItem value="Baja">
-                                      <div className="flex items-center gap-2">
-                                        <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                                        <span>Baja</span>
-                                      </div>
-                                    </SelectItem>
-                                  </SelectContent>
-                                </Select>
-                                <FormDescription className="text-xs">
-                                  Usuarios activos pueden acceder al sistema
                                 </FormDescription>
                                 <FormMessage />
                               </FormItem>
@@ -1678,6 +1821,32 @@ export default function UsuariosPage() {
                 </Form>
               </DialogContent>
             </Dialog>
+
+            {/* Diálogo de confirmación para eliminación permanente */}
+            <AlertDialog open={showPermanentDeleteDialog} onOpenChange={setShowPermanentDeleteDialog}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>¿Eliminar usuario permanentemente?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Esta acción eliminará al usuario de forma definitiva. No se podrá recuperar la información.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="bg-muted p-3 rounded-md text-sm">
+                  <div className="font-medium">{selectedUser?.fullName}</div>
+                  <div className="text-muted-foreground">{selectedUser?.email}</div>
+                  <div className="text-muted-foreground">ID: {selectedUser?.numcontrol || selectedUser?.id}</div>
+                </div>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-red-600 text-white hover:bg-red-700"
+                    onClick={handlePermanentDeleteUser}
+                  >
+                    Eliminar usuario
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </>
         )}
       </div>

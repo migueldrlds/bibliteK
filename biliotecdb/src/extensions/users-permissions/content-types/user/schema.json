@@ -96,7 +96,8 @@
       "enum": [
         "Alumno",
         "Interno",
-        "Administrador"
+        "Administrador",
+        "Bibliotecario"
       ],
       "required": true
     },

@@ -11,6 +11,8 @@ interface User {
   role: string;
   numcontrol?: string;
   createdAt: string;
+  lastLogin?: string;
+  Estado?: string;
 }
 
 // Define los permisos específicos para cada rol
@@ -80,14 +82,14 @@ const generatePermissionsByRole = (role: string): Permissions => {
   // Permisos para internos
   if (roleLower === 'interno') {
     return {
-      canAccessDashboard: true,
+      canAccessDashboard: false,
       canAccessCatalogo: true,
-      canAccessPrestamos: true,
-      canAccessReportes: true,
+      canAccessPrestamos: false,
+      canAccessReportes: false,
       canAccessUsuarios: false,
-      canCreateLoans: true,
-      canUpdateLoans: true,
-      canDeleteLoans: true,
+      canCreateLoans: false,
+      canUpdateLoans: false,
+      canDeleteLoans: false,
       canManageUsers: false
     };
   }
@@ -222,7 +224,21 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       setError(null);
       const response = await authService.login(email, password);
       console.log("Login exitoso, respuesta:", response);
-      setUser(response.user);
+      
+      // Actualizar el último inicio de sesión
+      const updatedUser = {
+        ...response.user,
+        lastLogin: new Date().toISOString(),
+        Estado: 'Activo'
+      };
+      
+      // Actualizar el usuario en el backend
+      await authService.updateUser(response.user.id, {
+        lastLogin: updatedUser.lastLogin,
+        Estado: 'Activo'
+      });
+      
+      setUser(updatedUser);
       
       // Actualizar el tiempo de la última solicitud exitosa
       lastRequestTime.current = Date.now();
@@ -275,6 +291,42 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     lastRequestTime.current = 0;
     router.push('/auth/login');
   };
+
+  // Función para verificar inactividad
+  const checkInactivity = async (user: User) => {
+    if (!user.lastLogin) return;
+    
+    const lastLogin = new Date(user.lastLogin);
+    const now = new Date();
+    const daysSinceLastLogin = Math.floor((now.getTime() - lastLogin.getTime()) / (1000 * 60 * 60 * 24));
+    
+    // Si han pasado más de 90 días sin iniciar sesión y el usuario está activo
+    if (daysSinceLastLogin > 90 && user.Estado === 'Activo') {
+      try {
+        // Actualizar el estado a inactivo
+        await authService.updateUser(user.id, {
+          Estado: 'Inactivo'
+        });
+        
+        // Actualizar el usuario en el contexto
+        setUser({
+          ...user,
+          Estado: 'Inactivo'
+        });
+        
+        console.log(`Usuario ${user.username} marcado como inactivo por inactividad`);
+      } catch (error) {
+        console.error('Error al actualizar estado de inactividad:', error);
+      }
+    }
+  };
+
+  // Verificar inactividad al cargar el usuario
+  useEffect(() => {
+    if (user) {
+      checkInactivity(user);
+    }
+  }, [user]);
 
   return (
     <UserContext.Provider

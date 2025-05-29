@@ -1109,7 +1109,9 @@ export interface PluginUsersPermissionsUser
     provider: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
     resetPasswordToken: Schema.Attribute.String & Schema.Attribute.Private;
-    rol: Schema.Attribute.Enumeration<['Alumno', 'Interno', 'Administrador']> &
+    rol: Schema.Attribute.Enumeration<
+      ['Alumno', 'Interno', 'Administrador', 'Bibliotecario']
+    > &
       Schema.Attribute.Required;
     role: Schema.Attribute.Relation<
       'manyToOne',

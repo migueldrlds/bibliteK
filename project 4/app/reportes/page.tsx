@@ -535,12 +535,45 @@ async function generarInformeOficial() {
     const response = await fetchAPI('/api/consultas?populate=*');
     const consultas = response.data || [];
 
-    // Cálculo robusto de estadísticas
+    // Obtener datos de libros
+    const librosResponse = await fetchAPI('/api/books?populate=inventories');
+    const libros = librosResponse.data || [];
+    const totalLibrosCatalogo = librosResponse.meta?.pagination?.total || libros.length;
+
+    // Obtener datos de usuarios
+    const usuariosResponse = await fetchAPI('/api/users');
+    const usuarios = Array.isArray(usuariosResponse.data) && usuariosResponse.data.length > 0
+      ? usuariosResponse.data
+      : (Array.isArray(usuariosResponse) ? usuariosResponse : []);
+
+    // Obtener datos de préstamos
+    const prestamosResponse = await fetchAPI('/api/loans?populate=*');
+    const prestamos = prestamosResponse.data || [];
+
+    // Cálculo de estadísticas
     const librosSet = new Set();
     const usuariosSet = new Set();
     let hombres = 0;
     let mujeres = 0;
     let fechas: Date[] = [];
+    let librosPerdidos = 0;
+
+    // Calcular libros perdidos
+    prestamos.forEach((prestamo: any) => {
+      if (prestamo.estado === 'perdido') {
+        librosPerdidos++;
+      }
+    });
+
+    // Calcular usuarios activos
+    const usuariosActivos = usuarios.filter((user: any) => {
+      const estado = (user.Estado || user.attributes?.Estado || '').toLowerCase();
+      return estado === 'activo';
+    });
+    
+    const porcentajeUsuariosActivos = usuarios.length > 0 
+      ? Math.round((usuariosActivos.length / usuarios.length) * 100) 
+      : 0;
 
     consultas.forEach((consulta: any) => {
       // Libro único
@@ -599,7 +632,7 @@ async function generarInformeOficial() {
     // Encabezado institucional
     doc.addImage('https://i.ibb.co/kggfMBJ2/ECD.png', 'PNG', margin, margin, pageWidth - (margin * 2), 30);
 
-    // Encabezado superior derecho: Instituto Tecnológico de Tijuana y bloque de fecha/oficio/asunto
+    // Encabezado superior derecho: Instituto Tecnológico de Tijuana y bloque de fecha/asunto
     doc.setFontSize(11);
     const instText = 'Instituto Tecnológico de Tijuana';
     const instTextWidth = doc.getTextWidth(instText);
@@ -627,16 +660,9 @@ async function generarInformeOficial() {
     doc.setTextColor(0,0,0);
     yEncabezado += 6;
 
-    // Oficio alineado a la derecha (texto normal, no recuadro)
-    doc.setFont('helvetica', 'normal');
-    const oficioTexto = 'Oficio No. 004/C1/2025';
-    const oficioTextWidth = doc.getTextWidth(oficioTexto);
-    doc.text(oficioTexto, pageWidth - margin - oficioTextWidth, yEncabezado);
-    yEncabezado += 6;
-
     // Asunto: normal + asunto resaltado
     const asuntoLabel = 'Asunto:';
-    const asuntoTexto = 'Validación de cifras del 4to trimestre del 2025';
+    const asuntoTexto = 'Informe de Estadísticas del Centro de Información';
     const asuntoLabelWidth = doc.getTextWidth(asuntoLabel + ' ');
     const asuntoTextoWidth = doc.getTextWidth(asuntoTexto);
     // Imprimir 'Asunto:'
@@ -662,7 +688,7 @@ async function generarInformeOficial() {
     // Cuerpo del oficio
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    doc.text('Sirva la presente para enviarle un cordial saludo y para validar las cifras reportadas en la encuesta de centro de informacion corresponiente al 2025, mismas que a continuacion enlisto.', margin, yDestinatario, {maxWidth: pageWidth - margin*2});
+    doc.text('Sirva la presente para enviarle un cordial saludo y para presentar las estadísticas actualizadas del Centro de Información, mismas que a continuación enlisto.', margin, yDestinatario, {maxWidth: pageWidth - margin*2});
 
     // Estadísticas (formato claro)
     let y = yDestinatario + 20;
@@ -670,14 +696,34 @@ async function generarInformeOficial() {
     const valueX = margin + 100;
     const salto = 8;
     doc.setFont('helvetica', 'bold');
-    doc.text('Cantidad total de consultas:', labelX, y);
+    doc.text('Cantidad total de libros impresos:', labelX, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`${totalLibrosCatalogo.toLocaleString('es-MX')}`, valueX, y);
+    y += salto;
+    doc.setFont('helvetica', 'bold');
+    doc.text('Total de libros consultados:', labelX, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`${librosSet.size}`, valueX, y);
+    y += salto;
+    doc.setFont('helvetica', 'bold');
+    doc.text('Total de visitas a la biblioteca digital:', labelX, y);
     doc.setFont('helvetica', 'normal');
     doc.text(`${consultas.length}`, valueX, y);
     y += salto;
     doc.setFont('helvetica', 'bold');
-    doc.text('Cantidad total de libros consultados:', labelX, y);
+    doc.text('Total de libros perdidos:', labelX, y);
     doc.setFont('helvetica', 'normal');
-    doc.text(`${librosSet.size}`, valueX, y);
+    doc.text(`${librosPerdidos}`, valueX, y);
+    y += salto;
+    doc.setFont('helvetica', 'bold');
+    doc.text('Porcentaje de usuarios activos:', labelX, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`${porcentajeUsuariosActivos}%`, valueX, y);
+    y += salto;
+    doc.setFont('helvetica', 'bold');
+    doc.text('Cantidad total de consultas:', labelX, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`${consultas.length}`, valueX, y);
     y += salto;
     doc.setFont('helvetica', 'bold');
     doc.text('Cantidad de usuarios que realizaron consultas:', labelX, y);

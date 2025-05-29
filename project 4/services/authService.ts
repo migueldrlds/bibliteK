@@ -1,4 +1,5 @@
 import fetchAPI from '../lib/api';
+import { API_BASE_URL } from '@/lib/config';
 
 export const authService = {
   // Iniciar sesión usando la API de autenticación de Strapi
@@ -203,5 +204,30 @@ export const authService = {
       console.error("Error al obtener usuario:", error);
       throw error;
     }
-  }
+  },
+
+  updateUser: async (userId: number, userData: any) => {
+    const token = localStorage.getItem('bibliotech-token');
+    if (!token) throw new Error('No hay token de autenticación');
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(userData),
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al actualizar usuario');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error en updateUser:', error);
+      throw error;
+    }
+  },
 }; 
