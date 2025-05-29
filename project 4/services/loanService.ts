@@ -438,6 +438,35 @@ export const loanService = {
         method: 'PUT',
         body: JSON.stringify({ data: updateData }),
       });
+
+      // Enviar correo de confirmación de devolución
+      try {
+        // Obtener los datos completos del libro y usuario para el correo
+        const bookDetails = await bookService.getBook(loan.book);
+        const userDetails = await fetchAPI(`/api/users/${loan.usuario}`);
+
+        await emailService.sendReturnConfirmation({
+          id: Number(id),
+          book: {
+            titulo: bookDetails.titulo,
+            autor: bookDetails.autor,
+            clasificacion: bookDetails.clasificacion,
+            categoria: bookDetails.categoria
+          },
+          usuario: {
+            email: userDetails.email,
+            username: userDetails.username
+          },
+          fecha_prestamo: loan.fecha_prestamo,
+          fecha_devolucion_esperada: loan.fecha_devolucion_esperada,
+          fecha_devolucion_real: updateData.fecha_devolucion_real,
+          estado: 'devuelto',
+          dias_atraso: updateData.dias_atraso
+        });
+        console.log("Correo de confirmación de devolución enviado exitosamente");
+      } catch (emailError) {
+        console.error("Error al enviar correo de confirmación:", emailError);
+      }
       
       // Si hay un campus de origen, actualizar el inventario
       if (loan.campus_origen) {

@@ -13,7 +13,9 @@ interface LoanData {
   };
   fecha_prestamo: string;
   fecha_devolucion_esperada: string;
+  fecha_devolucion_real?: string;
   estado: string;
+  dias_atraso?: number;
 }
 
 const API_URL = 'http://localhost:3000';
@@ -144,6 +146,78 @@ export const emailService = {
       return true;
     } catch (error) {
       console.error('Error al enviar correo de recordatorio:', error);
+      throw error;
+    }
+  },
+
+  // Enviar correo de confirmación de devolución
+  sendReturnConfirmation: async (loanData: LoanData) => {
+    try {
+      const isLate = loanData.dias_atraso && loanData.dias_atraso > 0;
+      const returnStatus = isLate ? 'Fuera de plazo' : 'En plazo';
+
+      const response = await fetch(`${API_URL}/api/send-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: loanData.usuario.email,
+          subject: 'Confirmación de devolución – ¡Gracias por utilizar BiblioteK!',
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+              <h2 style="color: #2c3e50; text-align: center;">📚 Confirmación de Devolución de Libro</h2>
+              
+              <p>Estimado/a ${loanData.usuario.username}:</p>
+              
+              <p>Te informamos que hemos recibido correctamente la devolución del siguiente material bibliográfico en el sistema BiblioteK del Instituto Tecnológico de Tijuana:</p>
+              
+              <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="color: #2c3e50; margin-top: 0;">📚 Detalles del ejemplar devuelto</h3>
+                <ul style="list-style-type: none; padding-left: 0;">
+                  <li>• Título: ${loanData.book.titulo}</li>
+                  <li>• Autor: ${loanData.book.autor}</li>
+                  ${loanData.book.clasificacion ? `<li>• Clasificación LCC: ${loanData.book.clasificacion}</li>` : ''}
+                  ${loanData.book.categoria ? `<li>• Categoría: ${loanData.book.categoria}</li>` : ''}
+                  <li>• Fecha de devolución: ${new Date(loanData.fecha_devolucion_real!).toLocaleDateString()}</li>
+                  <li>• Estado de devolución: ${returnStatus}</li>
+                </ul>
+              </div>
+              
+              <div style="background-color: #e8f5e9; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="color: #2e7d32; margin-top: 0;">✅ Gracias por utilizar nuestros servicios</h3>
+                <p>Agradecemos tu compromiso con el reglamento bibliotecario y tu participación activa en el uso responsable de los recursos del Instituto. Cada devolución a tiempo permite que más estudiantes puedan acceder al mismo material.</p>
+              </div>
+              
+              <div style="background-color: #fff3cd; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="color: #856404; margin-top: 0;">📌 Recuerda</h3>
+                <ul style="list-style-type: none; padding-left: 0;">
+                  <li>• Puedes consultar tu historial y próximos préstamos en tu cuenta de usuario de BiblioteK.</li>
+                  <li>• Para futuras consultas o renovaciones, te invitamos a visitar nuevamente la biblioteca.</li>
+                </ul>
+              </div>
+              
+              <p>Si tienes alguna duda, el personal de biblioteca está disponible para apoyarte durante el horario de atención.</p>
+              
+              <div style="margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px;">
+                <p style="margin: 0;">Atentamente,<br>
+                <strong>Equipo BiblioteK</strong><br>
+                Sistema de Gestión Bibliotecaria<br>
+                Instituto Tecnológico de Tijuana</p>
+              </div>
+            </div>
+          `,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al enviar correo de confirmación de devolución');
+      }
+
+      console.log('Correo de confirmación de devolución enviado exitosamente');
+      return true;
+    } catch (error) {
+      console.error('Error al enviar correo de confirmación de devolución:', error);
       throw error;
     }
   },
