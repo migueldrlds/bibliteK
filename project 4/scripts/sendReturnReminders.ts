@@ -1,5 +1,5 @@
-import { loanService } from '../services/loanService.js';
-import { emailService } from '../services/emailService.js';
+import { loanService } from '../services/loanService';
+import { emailService } from '../services/emailService';
 import { addDays, isBefore } from 'date-fns';
 
 async function sendReturnReminders() {

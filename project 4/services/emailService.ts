@@ -16,11 +16,13 @@ interface LoanData {
   estado: string;
 }
 
+const API_URL = 'http://localhost:3000';
+
 export const emailService = {
   // Enviar correo de notificación de préstamo
   sendLoanNotification: async (loanData: LoanData) => {
     try {
-      const response = await fetch('/api/send-email', {
+      const response = await fetch(`${API_URL}/api/send-email`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -85,7 +87,7 @@ export const emailService = {
   // Enviar correo de recordatorio de devolución
   sendReturnReminder: async (loanData: LoanData) => {
     try {
-      const response = await fetch('/api/send-email', {
+      const response = await fetch(`${API_URL}/api/send-email`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
