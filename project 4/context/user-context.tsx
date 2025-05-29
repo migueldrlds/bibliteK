@@ -42,6 +42,7 @@ interface UserContextType {
   checkPermission: (requiredRoles: string[], hideForRoles?: string[]) => boolean;
   permissions: Permissions | null;
   refreshUserData: () => Promise<void>;
+  permissionsLoading: boolean;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -76,6 +77,21 @@ const generatePermissionsByRole = (role: string): Permissions => {
       canUpdateLoans: true,
       canDeleteLoans: true,
       canManageUsers: true
+    };
+  }
+
+  // Permisos para bibliotecarios (igual que administrador pero sin gestión de usuarios)
+  if (roleLower === 'bibliotecario') {
+    return {
+      canAccessDashboard: true,
+      canAccessCatalogo: true,
+      canAccessPrestamos: true,
+      canAccessReportes: true,
+      canAccessUsuarios: true, // Puede ver la sección de usuarios
+      canCreateLoans: true,
+      canUpdateLoans: true,
+      canDeleteLoans: true,
+      canManageUsers: true // Puede gestionar usuarios (dar de baja/reactivar)
     };
   }
   
@@ -344,6 +360,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         checkPermission,
         permissions,
         refreshUserData,
+        permissionsLoading: false,
       }}
     >
       {children}

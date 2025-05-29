@@ -1,0 +1,38 @@
+{
+  "kind": "collectionType",
+  "collectionName": "entradas",
+  "info": {
+    "singularName": "entrada",
+    "pluralName": "entradas",
+    "displayName": "Entrada"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "attributes": {
+    "Tipo": {
+      "type": "enumeration",
+      "enum": [
+        "Login",
+        "Consulta"
+      ],
+      "required": true
+    },
+    "Usuario": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user",
+      "inversedBy": "entradas"
+    },
+    "Bibliotecario": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user",
+      "inversedBy": "entradas"
+    },
+    "Fecha": {
+      "type": "datetime",
+      "required": true
+    }
+  }
+}

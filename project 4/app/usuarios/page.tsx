@@ -426,8 +426,12 @@ export default function UsuariosPage() {
 
   // Verificar permisos al cargar la página
   useEffect(() => {
-    if (!permissionsLoading && isAuthenticated && permissions && !permissions.canAccessUsuarios) {
-      router.push('/catalogo');
+    // Solo redirigir si los permisos ya se han cargado y el usuario está autenticado
+    if (!permissionsLoading && isAuthenticated && permissions) {
+      if (!permissions.canAccessUsuarios) {
+        console.log("Usuario no tiene permiso para acceder a usuarios, redirigiendo a catálogo");
+        router.push('/catalogo');
+      }
     }
   }, [permissions, isAuthenticated, permissionsLoading, router]);
 
@@ -543,24 +547,14 @@ export default function UsuariosPage() {
     );
   }
 
-  // Redirigir si no tiene permisos
-  if (isAuthenticated && permissions && !permissions.canAccessUsuarios) {
-    router.push('/catalogo');
+  // No redirigir si aún se están cargando los permisos
+  if (permissionsLoading) {
     return null;
   }
 
-  // Mostrar loading mientras se cargan los datos
-  if (dataLoading) {
-    return (
-      <DashboardLayout>
-        <div className="flex justify-center items-center min-h-[400px]">
-          <div className="flex flex-col items-center">
-            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-            <p className="mt-4 text-muted-foreground">Cargando usuarios...</p>
-          </div>
-        </div>
-      </DashboardLayout>
-    );
+  // Solo redirigir si los permisos están cargados y el usuario no tiene acceso
+  if (!permissionsLoading && isAuthenticated && permissions && !permissions.canAccessUsuarios) {
+    return null; // El useEffect ya maneja la redirección
   }
 
   // Filtrar usuarios basados en término de búsqueda y filtros
@@ -1039,30 +1033,20 @@ export default function UsuariosPage() {
                             Reactivar
                           </DropdownMenuItem>
                         ) : (
-                          <DropdownMenuItem
-                            className="text-amber-600 focus:text-amber-600"
-                            onClick={() => {
-                              setSelectedUser(rowUser);
-                              setShowDeleteDialog(true);
-                            }}
-                          >
-                            <AlertTriangle className="mr-2 h-4 w-4" />
-                            Dar de baja
-                          </DropdownMenuItem>
-                        )}
-                        {user?.role?.toLowerCase() === "administrador" && (
                           <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-red-600 focus:text-red-600"
-                              onClick={() => {
-                                setSelectedUser(rowUser);
-                                setShowPermanentDeleteDialog(true);
-                              }}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Eliminar usuario
-                            </DropdownMenuItem>
+                            {(user?.role?.toLowerCase() === "administrador" || user?.role?.toLowerCase() === "bibliotecario") && (
+                              <DropdownMenuItem 
+                                className="text-amber-600 focus:text-amber-600"
+                                onSelect={(e) => e.preventDefault()}
+                                onClick={() => {
+                                  setSelectedUser(rowUser);
+                                  setShowDeleteDialog(true);
+                                }}
+                              >
+                                <AlertTriangle className="mr-2 h-4 w-4" />
+                                Dar de baja
+                              </DropdownMenuItem>
+                            )}
                           </>
                         )}
                       </DropdownMenuContent>
@@ -1231,12 +1215,14 @@ export default function UsuariosPage() {
                                     <span>Interno (Maestros/Administrativos)</span>
                                   </div>
                                 </SelectItem>
-                                <SelectItem value="Administrador">
-                                  <div className="flex items-center gap-2">
-                                    <User className="h-3.5 w-3.5 text-rose-500" />
-                                    <span>Administrador</span>
-                                  </div>
-                                </SelectItem>
+                                {user?.role?.toLowerCase() === 'administrador' && (
+                                  <SelectItem value="Administrador">
+                                    <div className="flex items-center gap-2">
+                                      <User className="h-3.5 w-3.5 text-rose-500" />
+                                      <span>Administrador</span>
+                                    </div>
+                                  </SelectItem>
+                                )}
                                 <SelectItem value="Bibliotecario">
                                   <div className="flex items-center gap-2">
                                     <BookOpen className="h-3.5 w-3.5 text-yellow-500" />
@@ -1710,12 +1696,14 @@ export default function UsuariosPage() {
                                         <span>Interno (Maestros/Administrativos)</span>
                                       </div>
                                     </SelectItem>
-                                    <SelectItem value="Administrador">
-                                      <div className="flex items-center gap-2">
-                                        <User className="h-3.5 w-3.5 text-rose-500" />
-                                        <span>Administrador</span>
-                                      </div>
-                                    </SelectItem>
+                                    {user?.role?.toLowerCase() === 'administrador' && (
+                                      <SelectItem value="Administrador">
+                                        <div className="flex items-center gap-2">
+                                          <User className="h-3.5 w-3.5 text-rose-500" />
+                                          <span>Administrador</span>
+                                        </div>
+                                      </SelectItem>
+                                    )}
                                     <SelectItem value="Bibliotecario">
                                       <div className="flex items-center gap-2">
                                         <BookOpen className="h-3.5 w-3.5 text-yellow-500" />

@@ -122,6 +122,12 @@
     "apellido": {
       "type": "string",
       "required": true
+    },
+    "entradas": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::entrada.entrada",
+      "mappedBy": "Bibliotecario"
     }
   }
 }

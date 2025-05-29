@@ -11,7 +11,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Library, LayoutDashboard, BookText, BookMarked, Users, BarChart3, LogOut, User, LogIn } from "lucide-react";
+import { Library, LayoutDashboard, BookText, BookMarked, Users, BarChart3, LogOut, User, LogIn, BookOpen } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { useUser } from "@/context/user-context";
@@ -190,6 +190,15 @@ export function Header() {
                 <Link href="/auth/login" className="flex items-center gap-2">
                   <LogIn className="h-4 w-4" />
                   <span>Iniciar sesión</span>
+                </Link>
+              </Button>
+            )}
+
+            {(user?.role?.toLowerCase() === 'administrador' || user?.role?.toLowerCase() === 'bibliotecario') && (
+              <Button asChild variant={pathname === '/entradas' ? 'secondary' : 'ghost'} size="sm">
+                <Link href="/entradas">
+                  <BookOpen className="mr-2 h-4 w-4" />
+                  Entradas
                 </Link>
               </Button>
             )}

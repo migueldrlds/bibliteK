@@ -211,13 +211,13 @@ export const authService = {
     if (!token) throw new Error('No hay token de autenticación');
 
     try {
-      const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/users/${userId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(userData),
+        body: JSON.stringify({ data: userData }),
       });
 
       if (!response.ok) {

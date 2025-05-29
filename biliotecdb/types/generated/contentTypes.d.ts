@@ -509,6 +509,44 @@ export interface ApiConsultaConsulta extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiEntradaEntrada extends Struct.CollectionTypeSchema {
+  collectionName: 'entradas';
+  info: {
+    displayName: 'Entrada';
+    pluralName: 'entradas';
+    singularName: 'entrada';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    Bibliotecario: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    Fecha: Schema.Attribute.DateTime & Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::entrada.entrada'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    Tipo: Schema.Attribute.Enumeration<['Login', 'Consulta']> &
+      Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    Usuario: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+  };
+}
+
 export interface ApiHolidayHoliday extends Struct.CollectionTypeSchema {
   collectionName: 'holidays';
   info: {
@@ -1091,6 +1129,7 @@ export interface PluginUsersPermissionsUser
       Schema.Attribute.SetMinMaxLength<{
         minLength: 6;
       }>;
+    entradas: Schema.Attribute.Relation<'oneToMany', 'api::entrada.entrada'>;
     Estado: Schema.Attribute.Enumeration<['Activo', 'Inactivo', 'Baja']>;
     Genero: Schema.Attribute.Enumeration<['Hombre', 'Mujer', 'Otro']>;
     loans: Schema.Attribute.Relation<'oneToMany', 'api::loan.loan'>;
@@ -1143,6 +1182,7 @@ declare module '@strapi/strapi' {
       'api::campus.campus': ApiCampusCampus;
       'api::carrera.carrera': ApiCarreraCarrera;
       'api::consulta.consulta': ApiConsultaConsulta;
+      'api::entrada.entrada': ApiEntradaEntrada;
       'api::holiday.holiday': ApiHolidayHoliday;
       'api::inventory.inventory': ApiInventoryInventory;
       'api::loan.loan': ApiLoanLoan;

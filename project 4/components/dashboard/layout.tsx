@@ -23,7 +23,7 @@ const routePermissions: Record<string, string> = {
 };
 
 export function DashboardLayout({ children, className }: DashboardLayoutProps) {
-  const { isAuthenticated, loading, permissions, isAdmin } = useUser();
+  const { isAuthenticated, loading, permissions, isAdmin, permissionsLoading } = useUser();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -48,22 +48,21 @@ export function DashboardLayout({ children, className }: DashboardLayoutProps) {
   useEffect(() => {
     if (!loading) {
       if (!isAuthenticated) {
-        // Redirigir a login si no está autenticado
         router.push('/auth/login');
-      } else if (!hasPermissionForRoute()) {
-        // Redirigir al catálogo si no tiene permisos para la ruta actual
+      } else if (!permissionsLoading && permissions && !hasPermissionForRoute()) {
         console.log(`Usuario no tiene permiso para: ${pathname}, redirigiendo a catálogo`);
         router.push('/catalogo');
       }
     }
-  }, [isAuthenticated, loading, pathname, permissions, router]);
+  }, [isAuthenticated, loading, pathname, permissions, permissionsLoading, router]);
 
-  if (loading) {
+  // Mostrar loading mientras se verifican los permisos
+  if (loading || permissionsLoading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
         <div className="flex flex-col items-center">
           <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-          <p className="mt-4 text-muted-foreground">Cargando...</p>
+          <p className="mt-4 text-muted-foreground">Verificando permisos...</p>
         </div>
       </div>
     );
