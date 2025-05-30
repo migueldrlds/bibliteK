@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { DateRange } from "react-day-picker";
-import { addDays, format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
+import { addDays, format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, setYear } from "date-fns";
 import { es } from "date-fns/locale";
 
 import { cn } from "@/lib/utils";
@@ -38,10 +38,34 @@ export function DateRangePicker({
   });
 
   const [quickSelect, setQuickSelect] = React.useState<string>("custom");
+  const currentYear = new Date().getFullYear();
+  const minYear = 2010;
+  const maxYear = currentYear + 1;
+  const years = Array.from({ length: maxYear - minYear + 1 }, (_, i) => minYear + i);
+  const [selectedYear, setSelectedYear] = React.useState<number | undefined>(undefined);
 
   const handleDateChange = (newDate: DateRange | undefined) => {
     setDate(newDate);
     onDateRangeChange?.(newDate);
+    if (newDate?.from && newDate?.to) {
+      const fromYear = newDate.from.getFullYear();
+      const toYear = newDate.to.getFullYear();
+      if (fromYear === toYear) {
+        setSelectedYear(fromYear);
+      } else {
+        setSelectedYear(undefined);
+      }
+    }
+  };
+
+  const handleYearSelect = (year: number) => {
+    setSelectedYear(year);
+    const from = new Date(year, 0, 1);
+    const to = new Date(year, 11, 31);
+    const newRange = { from, to };
+    setDate(newRange);
+    onDateRangeChange?.(newRange);
+    setQuickSelect("custom");
   };
 
   const handleQuickSelect = (value: string) => {
@@ -102,6 +126,19 @@ export function DateRangePicker({
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
+          <div className="p-3 border-b flex gap-2 items-center">
+            <span className="text-xs text-muted-foreground">Año:</span>
+            <Select value={selectedYear ? String(selectedYear) : undefined} onValueChange={v => handleYearSelect(Number(v))}>
+              <SelectTrigger className="w-24">
+                <SelectValue placeholder="Año" />
+              </SelectTrigger>
+              <SelectContent>
+                {years.map(y => (
+                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="p-3 border-b">
             <Select value={quickSelect} onValueChange={handleQuickSelect}>
               <SelectTrigger className="w-full">

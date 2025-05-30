@@ -10,6 +10,7 @@ export interface Book {
   titulo: string;
   autor: string;
   clasificacion: string;
+  clasificacion_lcc?: string;
   unidad: number;
   createdAt?: string;
   updatedAt?: string;

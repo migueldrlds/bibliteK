@@ -36,14 +36,14 @@ export const emailService = {
           subject: 'Confirmación de préstamo bibliográfico – BiblioteK',
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
-              <h2 style="color: #2c3e50; text-align: center;">📩 Confirmación de Préstamo Activo</h2>
+              <h2 style="color: #2c3e50; text-align: center;">Confirmación de Préstamo Activo</h2>
               
               <p>Estimado/a ${loanData.usuario.username}:</p>
               
               <p>Te informamos que se ha registrado correctamente el préstamo del siguiente material bibliográfico a través del sistema BiblioteK del Instituto Tecnológico de Tijuana:</p>
               
               <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <h3 style="color: #2c3e50; margin-top: 0;">📚 Detalles del préstamo</h3>
+                <h3 style="color: #2c3e50; margin-top: 0;">Detalles del préstamo</h3>
                 <ul style="list-style-type: none; padding-left: 0;">
                   <li>• Título: ${loanData.book.titulo}</li>
                   <li>• Autor: ${loanData.book.autor}</li>
@@ -56,7 +56,7 @@ export const emailService = {
               </div>
               
               <div style="background-color: #fff3cd; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <h3 style="color: #856404; margin-top: 0;">📌 Importante</h3>
+                <h3 style="color: #856404; margin-top: 0;">Importante</h3>
                 <ul style="list-style-type: none; padding-left: 0;">
                   <li>• La devolución del ejemplar debe realizarse personalmente en la biblioteca antes de la fecha indicada.</li>
                   <li>• Si necesitas renovar el préstamo, deberás acudir a la biblioteca antes del vencimiento.</li>
@@ -102,14 +102,14 @@ export const emailService = {
           subject: 'Recordatorio de vencimiento de préstamo – BiblioteK',
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
-              <h2 style="color: #2c3e50; text-align: center;">📩 Recordatorio de Préstamo por Vencer</h2>
+              <h2 style="color: #2c3e50; text-align: center;">Recordatorio de Préstamo por Vencer</h2>
               
               <p>Estimado/a ${loanData.usuario.username}:</p>
               
               <p>Te recordamos que el siguiente préstamo realizado a tu nombre en BiblioteK está próximo a vencer. Agradecemos tu atención para evitar retrasos en la devolución:</p>
               
               <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <h3 style="color: #2c3e50; margin-top: 0;">📚 Detalles del préstamo</h3>
+                <h3 style="color: #2c3e50; margin-top: 0;">Detalles del préstamo</h3>
                 <ul style="list-style-type: none; padding-left: 0;">
                   <li>• Título: ${loanData.book.titulo}</li>
                   <li>• Autor: ${loanData.book.autor}</li>
@@ -121,7 +121,7 @@ export const emailService = {
               </div>
               
               <div style="background-color: #fff3cd; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <h3 style="color: #856404; margin-top: 0;">🔔 Recomendaciones</h3>
+                <h3 style="color: #856404; margin-top: 0;">Recomendaciones</h3>
                 <ul style="list-style-type: none; padding-left: 0;">
                   <li>• Entrega el ejemplar directamente en la biblioteca antes de la fecha señalada.</li>
                   <li>• Si requieres renovar el préstamo, puedes solicitarlo personalmente en el área de préstamos, siempre que aún se encuentre vigente.</li>
@@ -171,14 +171,14 @@ export const emailService = {
           subject: 'Confirmación de devolución – ¡Gracias por utilizar BiblioteK!',
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
-              <h2 style="color: #2c3e50; text-align: center;">📚 Confirmación de Devolución de Libro</h2>
+              <h2 style="color: #2c3e50; text-align: center;">Confirmación de Devolución de Libro</h2>
               
               <p>Estimado/a ${loanData.usuario.username}:</p>
               
               <p>Te informamos que hemos recibido correctamente la devolución del siguiente material bibliográfico en el sistema BiblioteK del Instituto Tecnológico de Tijuana:</p>
               
               <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <h3 style="color: #2c3e50; margin-top: 0;">📚 Detalles del ejemplar devuelto</h3>
+                <h3 style="color: #2c3e50; margin-top: 0;">Detalles del ejemplar devuelto</h3>
                 <ul style="list-style-type: none; padding-left: 0;">
                   <li>• Título: ${loanData.book.titulo}</li>
                   <li>• Autor: ${loanData.book.autor}</li>
@@ -191,12 +191,12 @@ export const emailService = {
               </div>
               
               <div style="background-color: #e8f5e9; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <h3 style="color: #2e7d32; margin-top: 0;">✅ Gracias por utilizar nuestros servicios</h3>
+                <h3 style="color: #2e7d32; margin-top: 0;">Gracias por utilizar nuestros servicios</h3>
                 <p>Agradecemos tu compromiso con el reglamento bibliotecario y tu participación activa en el uso responsable de los recursos del Instituto. Cada devolución a tiempo permite que más estudiantes puedan acceder al mismo material.</p>
               </div>
               
               <div style="background-color: #fff3cd; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <h3 style="color: #856404; margin-top: 0;">📌 Recuerda</h3>
+                <h3 style="color: #856404; margin-top: 0;">Recuerda</h3>
                 <ul style="list-style-type: none; padding-left: 0;">
                   <li>• Puedes consultar tu historial y próximos préstamos en tu cuenta de usuario de BiblioteK.</li>
                   <li>• Para futuras consultas o renovaciones, te invitamos a visitar nuevamente la biblioteca.</li>
@@ -241,14 +241,14 @@ export const emailService = {
           subject: 'Aviso de devolución tardía – Material bibliográfico BiblioteK',
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
-              <h2 style="color: #2c3e50; text-align: center;">⚠️ Notificación de Devolución Tardía</h2>
+              <h2 style="color: #2c3e50; text-align: center;">Notificación de Devolución Tardía</h2>
               
               <p>Estimado/a ${loanData.usuario.username}:</p>
               
               <p>Te informamos que el siguiente material bibliográfico fue devuelto fuera del plazo establecido, según el registro del sistema BiblioteK del Instituto Tecnológico de Tijuana:</p>
               
               <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <h3 style="color: #2c3e50; margin-top: 0;">📚 Detalles del ejemplar devuelto</h3>
+                <h3 style="color: #2c3e50; margin-top: 0;">Detalles del ejemplar devuelto</h3>
                 <ul style="list-style-type: none; padding-left: 0;">
                   <li>• Título: ${loanData.book.titulo}</li>
                   <li>• Autor: ${loanData.book.autor}</li>
@@ -262,12 +262,12 @@ export const emailService = {
               </div>
               
               <div style="background-color: #fff3cd; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <h3 style="color: #856404; margin-top: 0;">⚠️ Importante</h3>
+                <h3 style="color: #856404; margin-top: 0;">Importante</h3>
                 <p>De acuerdo con el reglamento bibliotecario, se genera automáticamente una multa de $10.00 MXN por cada día hábil de atraso. Esta penalización no considera fines de semana, días festivos ni suspensiones académicas, y es calculada utilizando el calendario oficial del Instituto.</p>
               </div>
               
               <div style="background-color: #e8f5e9; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <h3 style="color: #2e7d32; margin-top: 0;">🔍 ¿Qué sigue?</h3>
+                <h3 style="color: #2e7d32; margin-top: 0;">¿Qué sigue?</h3>
                 <ul style="list-style-type: none; padding-left: 0;">
                   <li>• Puedes consultar el detalle de tu multa y tu historial en tu cuenta de usuario de BiblioteK.</li>
                   <li>• Te recomendamos acudir a la biblioteca para regularizar tu situación.</li>
@@ -319,14 +319,14 @@ export const emailService = {
           subject: 'Renovación confirmada – Material bibliográfico BiblioteK',
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
-              <h2 style="color: #2c3e50; text-align: center;">📚 Renovación Confirmada</h2>
+              <h2 style="color: #2c3e50; text-align: center;">Renovación Confirmada</h2>
               
               <p>Estimado/a ${loanData.usuario.username}:</p>
               
               <p>Te confirmamos que se ha registrado exitosamente la renovación del siguiente material bibliográfico a través del sistema BiblioteK del Instituto Tecnológico de Tijuana:</p>
               
               <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <h3 style="color: #2c3e50; margin-top: 0;">📚 Detalles del préstamo renovado</h3>
+                <h3 style="color: #2c3e50; margin-top: 0;">Detalles del préstamo renovado</h3>
                 <ul style="list-style-type: none; padding-left: 0;">
                   <li>• Título: ${loanData.book.titulo}</li>
                   <li>• Autor: ${loanData.book.autor}</li>
@@ -340,7 +340,7 @@ export const emailService = {
               </div>
               
               <div style="background-color: #fff3cd; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <h3 style="color: #856404; margin-top: 0;">📌 Información importante</h3>
+                <h3 style="color: #856404; margin-top: 0;">Información importante</h3>
                 ${isLiterature && loanData.renewalCount === 2 ? 
                   `<p>Este es el límite máximo de renovaciones permitido para libros de Literatura. A partir de ahora, deberás devolver el ejemplar a más tardar en la fecha indicada para evitar sanciones.</p>` :
                   isLiterature && loanData.renewalCount === 1 ?
@@ -350,7 +350,7 @@ export const emailService = {
               </div>
               
               <div style="background-color: #e8f5e9; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <h3 style="color: #2e7d32; margin-top: 0;">⚠️ Recuerda</h3>
+                <h3 style="color: #2e7d32; margin-top: 0;">Recuerda</h3>
                 <ul style="list-style-type: none; padding-left: 0;">
                   <li>• El incumplimiento en la devolución generará una multa de $10.00 MXN por cada día hábil de atraso.</li>
                   <li>• No se cuentan fines de semana ni días festivos; la multa se calcula usando el calendario institucional.</li>

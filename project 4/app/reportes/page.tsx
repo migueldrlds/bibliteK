@@ -100,7 +100,7 @@ import fetchAPI from "@/lib/api";
 // Importar useRouter para la navegación
 import { useRouter } from 'next/navigation';
 // Importar para formatear fecha relativa
-import { formatDistanceToNow, parseISO, format } from "date-fns";
+import { formatDistanceToNow, parseISO, format, startOfDay, endOfDay } from "date-fns";
 import { es } from "date-fns/locale";
 // Importar estilos para el efecto glow
 import "@/styles/glow-card.css";
@@ -971,98 +971,112 @@ async function descargarInventarioCompleto() {
 }
 
 // 2. Préstamos Mensuales
-async function descargarPrestamosMensuales() {
+async function descargarPrestamosMensuales(tipo: 'csv' | 'excel', dateRange?: DateRange, selectedColumns: string[] = columnasDisponibles.map(col => col.id)) {
   try {
-    const response = await fetchAPI('/api/loans?populate=*');
+    // Usar populate para usuario, usuario.carrera, usuario.campus
+    const response = await fetchAPI('/api/loans?populate[0]=usuario&populate[1]=usuario.carrera&populate[2]=usuario.campus&populate[3]=book');
     const loans = response.data || [];
-    const hoy = new Date();
-    const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-    const ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
-    const prestamosDelMes = loans.filter((loan: any) => {
+    // Filtrar por rango de fechas seleccionado
+    const from = dateRange?.from ? new Date(dateRange.from) : null;
+    const to = dateRange?.to ? new Date(dateRange.to) : null;
+    const prestamosFiltrados = loans.filter((loan: any) => {
       const fecha = new Date(loan.fecha_prestamo || loan.attributes?.fecha_prestamo);
-      return fecha >= primerDiaMes && fecha <= ultimoDiaMes;
+      if (from && to) {
+        return fecha >= from && fecha <= to;
+      }
+      return true;
     });
-
     // Obtener campus y carreras para referencia
     const campusRes = await fetch('http://localhost:1337/api/campuses?populate=*');
     const campusData = await campusRes.json();
     const campuses = campusData.data || campusData;
-    
     const careerRes = await fetch('http://localhost:1337/api/carreras?populate=campus');
     const careerData = await careerRes.json();
     const careers = careerData.data || careerData;
-
-    const filas = prestamosDelMes.map((loan: any) => {
+    // Procesar los datos según las columnas seleccionadas
+    const filas = prestamosFiltrados.map((loan: any) => {
       const attrs = loan.attributes || loan;
       const book = attrs.book?.data?.attributes || attrs.book || {};
       const user = attrs.usuario?.data?.attributes || attrs.usuario || {};
-
-      // Lógica mejorada para carrera
+      // Lógica para carrera y campus
       let carrera = "";
       if (user.carrera) {
         if (typeof user.carrera === 'object' && user.carrera !== null) {
-          carrera = user.carrera.attributes?.Nombre || 
-                   user.carrera.Nombre || 
-                   user.carrera.data?.attributes?.Nombre ||
-                   user.carrera.data?.Nombre || '';
+          carrera = user.carrera.attributes?.Nombre || user.carrera.Nombre || '';
         } else if (typeof user.carrera === 'string' || typeof user.carrera === 'number') {
           const careerObj = careers.find((c: any) => {
             const careerId = c.id?.toString() || c.attributes?.id?.toString();
             return careerId === user.carrera.toString();
           });
-          carrera = careerObj?.attributes?.Nombre || 
-                   careerObj?.Nombre || 
-                   careerObj?.data?.attributes?.Nombre ||
-                   careerObj?.data?.Nombre || 
-                   user.carrera;
+          carrera = careerObj?.attributes?.Nombre || careerObj?.Nombre || user.carrera;
         }
       }
-
-      // Lógica mejorada para campus
       let campus = "";
       if (user.campus) {
         if (typeof user.campus === 'object' && user.campus !== null) {
-          campus = user.campus.attributes?.Nombre || 
-                  user.campus.Nombre || 
-                  user.campus.data?.attributes?.Nombre ||
-                  user.campus.data?.Nombre || '';
+          campus = user.campus.attributes?.Nombre || user.campus.Nombre || '';
         } else if (typeof user.campus === 'string' || typeof user.campus === 'number') {
           const campusObj = campuses.find((c: any) => {
             const campusId = c.id?.toString() || c.attributes?.id?.toString();
             return campusId === user.campus.toString();
           });
-          campus = campusObj?.attributes?.Nombre || 
-                  campusObj?.Nombre || 
-                  campusObj?.data?.attributes?.Nombre ||
-                  campusObj?.data?.Nombre || 
-                  user.campus;
+          campus = campusObj?.attributes?.Nombre || campusObj?.Nombre || user.campus;
         }
       }
-
-      return {
-        "ID Préstamo": loan.id || attrs.id || '',
-        "ID Libro": attrs.book?.data?.id || book.id || '',
-        "Título": book.titulo || '',
-        "Autor": book.autor || '',
-        "Clasificación": book.clasificacion || '',
-        "Usuario": user.username || '',
-        "Apellidos": user.apellido || '',
-        "Num Control": user.Numcontrol || '',
-        "Carrera": carrera,
-        "Campus": campus,
-        "Fecha Préstamo": attrs.fecha_prestamo || '',
-        "Fecha Devolución Esperada": attrs.fecha_devolucion_esperada || '',
-        "Fecha Devolución Real": attrs.fecha_devolucion_real || '',
-        "Estado": attrs.estado || '',
-        "Notas": attrs.notas || ''
+      // Extraer género, estado y rol
+      const genero = user.Genero || user.genero || '';
+      const estado = user.Estado || user.estado || '';
+      const rol = user.rol || '';
+      // Mapeo de valores según las columnas seleccionadas
+      const valores: { [key: string]: string } = {
+        id: loan.id || attrs.id || '',
+        documentId: attrs.book?.data?.id || book.id || '',
+        fecha: attrs.fecha_prestamo || '',
+        book_titulo: book.titulo || '',
+        book_autor: book.autor || '',
+        book_clasificacion: book.clasificacion || '',
+        user_username: user.username || '',
+        user_apellido: user.apellido || '',
+        user_numcontrol: user.Numcontrol || '',
+        user_carrera: carrera,
+        user_campus: campus,
+        user_genero: genero,
+        user_estado: estado,
+        user_rol: rol,
+        estado: attrs.estado || '',
+        createdAt: attrs.createdAt || '',
+        updatedAt: attrs.updatedAt || '',
+        publishedAt: attrs.publishedAt || '',
+        fecha_devolucion_esperada: attrs.fecha_devolucion_esperada || '',
+        fecha_devolucion_real: attrs.fecha_devolucion_real || '',
+        notas: attrs.notas || ''
       };
+      // Crear objeto solo con las columnas seleccionadas en el orden correcto
+      const fila: { [key: string]: string } = {};
+      selectedColumns.forEach(colId => {
+        const columna = columnasDisponibles.find(col => col.id === colId);
+        if (columna) {
+          fila[columna.label] = valores[colId];
+        }
+      });
+      return fila;
     });
-    const ws = XLSX.utils.json_to_sheet(filas);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "PrestamosMes");
-    const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    if (tipo === 'csv') {
+      // Exportar CSV
+      const encabezados = columnasDisponibles.filter(col => selectedColumns.includes(col.id)).map(col => col.label);
+      const csv = [encabezados, ...filas.map((fila: any) => encabezados.map(label => `"${fila[label] || ''}"`))]
+        .map(row => row.join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      saveAs(blob, `prestamos_mensuales.csv`);
+    } else {
+      // Exportar Excel
+      const worksheet = XLSX.utils.json_to_sheet(filas);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "PréstamosMensuales");
+      const excelBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
     const blob = new Blob([excelBuffer], { type: "application/octet-stream" });
-    saveAs(blob, "prestamos_mensuales.xlsx");
+      saveAs(blob, `prestamos_mensuales.xlsx`);
+    }
   } catch (error) {
     alert("Error al descargar préstamos mensuales");
   }
@@ -1071,18 +1085,24 @@ async function descargarPrestamosMensuales() {
 // 3. Usuarios por Carrera
 async function descargarUsuariosPorCarrera() {
   try {
-    // Obtener usuarios con sus relaciones
-    const usuarios = await fetchAPI('/api/users?populate[0]=carrera&populate[1]=campus');
-    
+    // Obtener todos los usuarios con paginación
+    let page = 1;
+    const pageSize = 1000;
+    let usuarios: any[] = [];
+    let data: any[] = [];
+    do {
+      const response = await fetchAPI(`/api/users?populate[0]=carrera&populate[1]=campus&pagination[page]=${page}&pagination[pageSize]=${pageSize}`);
+      data = response || [];
+      usuarios = usuarios.concat(data);
+      page++;
+    } while (data.length === pageSize);
     // Obtener campus y carreras para referencia
     const campusRes = await fetch('http://localhost:1337/api/campuses?populate=*');
     const campusData = await campusRes.json();
     const campuses = campusData.data || campusData;
-    
     const careerRes = await fetch('http://localhost:1337/api/carreras?populate=campus');
     const careerData = await careerRes.json();
     const careers = careerData.data || careerData;
-
     const filas = usuarios.map((user: any) => {
       // Lógica mejorada para carrera
       let carrera = "";
@@ -1104,7 +1124,6 @@ async function descargarUsuariosPorCarrera() {
                    user.carrera;
         }
       }
-
       // Lógica mejorada para campus
       let campus = "";
       if (user.campus) {
@@ -1125,7 +1144,6 @@ async function descargarUsuariosPorCarrera() {
                   user.campus;
         }
       }
-
       return {
         "ID": user.id,
         "Username": user.username,
@@ -1248,20 +1266,23 @@ async function descargarDevolucionesPendientes() {
 }
 
 // 5. Top Libros del Semestre
-async function descargarTopLibrosSemestre() {
+async function descargarTopLibrosSemestre(dateRange?: DateRange) {
   try {
     const response = await fetchAPI('/api/loans?populate=*');
     const loans = response.data || [];
-    const hoy = new Date();
-    const primerDiaSemestre = new Date(hoy.getFullYear(), hoy.getMonth() < 6 ? 0 : 6, 1);
-    const prestamosSemestre = loans.filter((loan: any) => {
+    // Filtrar por rango de fechas seleccionado
+    let prestamosFiltrados = loans;
+    if (dateRange?.from && dateRange?.to) {
+      const from = new Date(dateRange.from);
+      const to = new Date(dateRange.to);
+      prestamosFiltrados = loans.filter((loan: any) => {
       const fecha = new Date(loan.fecha_prestamo || loan.attributes?.fecha_prestamo);
-      return fecha >= primerDiaSemestre;
+        return fecha >= from && fecha <= to;
     });
-
+    }
     // Contar préstamos por libro
     const prestamosPorLibro = new Map();
-    prestamosSemestre.forEach((loan: any) => {
+    prestamosFiltrados.forEach((loan: any) => {
       const book = loan.book?.data?.attributes || loan.book || {};
       const bookId = book.id || loan.book?.data?.id;
       if (bookId) {
@@ -1269,11 +1290,10 @@ async function descargarTopLibrosSemestre() {
         prestamosPorLibro.set(bookId, count + 1);
       }
     });
-
     // Convertir a array y ordenar por cantidad de préstamos
     const librosOrdenados = Array.from(prestamosPorLibro.entries())
       .map(([bookId, count]) => {
-        const loan = prestamosSemestre.find((l: any) => 
+        const loan = prestamosFiltrados.find((l: any) => 
           (l.book?.data?.id || l.book?.id) === bookId
         );
         const book = loan?.book?.data?.attributes || loan?.book || {};
@@ -1287,42 +1307,46 @@ async function descargarTopLibrosSemestre() {
       })
       .sort((a, b) => b["Préstamos"] - a["Préstamos"])
       .slice(0, 50); // Top 50 libros
-
     const ws = XLSX.utils.json_to_sheet(librosOrdenados);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "TopLibros");
     const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
     const blob = new Blob([excelBuffer], { type: "application/octet-stream" });
-    saveAs(blob, "top_libros_semestre.xlsx");
+    saveAs(blob, "top_libros_periodo.xlsx");
   } catch (error) {
-    alert("Error al descargar top libros del semestre");
+    alert("Error al descargar top libros del periodo");
   }
 }
 
 // 6. Historial de Devoluciones
-async function descargarHistorialDevoluciones() {
+async function descargarHistorialDevoluciones(dateRange?: DateRange) {
   try {
     const response = await fetchAPI('/api/loans?populate[0]=book&populate[1]=usuario&populate[2]=usuario.carrera&populate[3]=usuario.campus');
     const loans = response.data || [];
-    const devoluciones = loans.filter((loan: any) => {
+    // Filtrar solo devoluciones y por rango de fechas
+    let devoluciones = loans.filter((loan: any) => {
       const estado = loan.estado || loan.attributes?.estado;
       return estado === 'devuelto';
     });
-
+    if (dateRange?.from && dateRange?.to) {
+      const from = new Date(dateRange.from);
+      const to = new Date(dateRange.to);
+      devoluciones = devoluciones.filter((loan: any) => {
+        const fecha = new Date(loan.fecha_devolucion_real || loan.attributes?.fecha_devolucion_real);
+        return fecha >= from && fecha <= to;
+      });
+    }
     // Obtener campus y carreras para referencia
     const campusRes = await fetch('http://localhost:1337/api/campuses?populate=*');
     const campusData = await campusRes.json();
     const campuses = campusData.data || campusData;
-    
     const careerRes = await fetch('http://localhost:1337/api/carreras?populate=campus');
     const careerData = await careerRes.json();
     const careers = careerData.data || careerData;
-
     const filas = devoluciones.map((loan: any) => {
       const attrs = loan.attributes || loan;
       const book = attrs.book?.data?.attributes || attrs.book || {};
       const user = attrs.usuario?.data?.attributes || attrs.usuario || {};
-
       // Lógica mejorada para carrera
       let carrera = "";
       if (user.carrera) {
@@ -1343,8 +1367,7 @@ async function descargarHistorialDevoluciones() {
                    user.carrera;
         }
       }
-
-      // Lógica mejorada para campus
+      // Lógica mejorada para campus del usuario
       let campus = "";
       if (user.campus) {
         if (typeof user.campus === 'object' && user.campus !== null) {
@@ -1364,7 +1387,17 @@ async function descargarHistorialDevoluciones() {
                   user.campus;
         }
       }
-
+      // Campus del libro/inventario
+      let campusLibro = "";
+      if (book.inventories && Array.isArray(book.inventories.data) && book.inventories.data.length > 0) {
+        // Si hay varios inventarios, concatenar los campus
+        campusLibro = book.inventories.data.map((inv: any) => {
+          const invAttrs = inv.attributes || inv;
+          return invAttrs.Campus || invAttrs.campus || '';
+        }).filter(Boolean).join(", ");
+      } else if (book.Campus || book.campus) {
+        campusLibro = book.Campus || book.campus;
+      }
       return {
         "ID Préstamo": loan.id || attrs.id || '',
         "ID Libro": attrs.book?.data?.id || book.id || '',
@@ -1376,6 +1409,7 @@ async function descargarHistorialDevoluciones() {
         "Num Control": user.Numcontrol || '',
         "Carrera": carrera,
         "Campus": campus,
+        "Campus del Libro": campusLibro,
         "Fecha Préstamo": attrs.fecha_prestamo || '',
         "Fecha Devolución Esperada": attrs.fecha_devolucion_esperada || '',
         "Fecha Devolución Real": attrs.fecha_devolucion_real || '',
@@ -1383,6 +1417,7 @@ async function descargarHistorialDevoluciones() {
         "Notas": attrs.notas || ''
       };
     });
+    console.log('Filas para historial de devoluciones:', filas);
     const ws = XLSX.utils.json_to_sheet(filas);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "HistorialDevoluciones");
@@ -1429,96 +1464,43 @@ function transformarUsuarioParaTabla(user: any) {
 // Función para descargar todos los usuarios en Excel (igual que la tabla de usuarios)
 async function descargarUsuariosExcel() {
   try {
-    // Obtener todos los usuarios desde la API
-    const usuarios = await fetchAPI('/api/users');
-    // Obtener todos los campus y carreras desde la API (igual que en usuarios/page.tsx)
-    const campusRes = await fetch('http://localhost:1337/api/campuses');
-    const campusData = await campusRes.json();
-    const campuses = campusData.data || campusData;
-    const careerRes = await fetch('http://localhost:1337/api/carreras?populate=campus');
-    const careerData = await careerRes.json();
-    const careers = careerData.data || careerData;
-
-    // Transformar igual que en la tabla
-    const usuariosTabla = usuarios.map(transformarUsuarioParaTabla);
-    // Encabezados igual que la tabla
-    const encabezados = [
-      "ID",
-      "Nombre",
-      "Apellidos",
-      "Género",
-      "Número de control",
-      "Correo electrónico",
-      "Carrera",
-      "Campus",
-      "Rol",
-      "Estado",
-      "Fecha de registro"
-    ];
-    // Procesar usuarios
-    const filas = usuariosTabla.map((user: any) => {
-      // Buscar nombre de campus
-      let campus = '';
-      if (user.campus) {
-        if (typeof user.campus === 'object' && user.campus !== null) {
-          campus = user.campus.attributes?.Nombre || user.campus.Nombre || '';
-        } else if (typeof user.campus === 'string' || typeof user.campus === 'number') {
-          // Buscar en la lista de campus
-          const campusObj = campuses.find((c: any) => c.id?.toString() === user.campus.toString());
-          campus = campusObj?.attributes?.Nombre || campusObj?.Nombre || user.campus;
-        }
-      }
-      // Buscar nombre de carrera
-      let carrera = user.career || '';
-      if (!carrera && user.careerId) {
-        const careerObj = careers.find((c: any) => c.id?.toString() === user.careerId.toString());
-        carrera = careerObj?.attributes?.Nombre || careerObj?.Nombre || '';
-      }
-      // Fecha de registro (formato dd MMM yyyy, español)
-      let fecha = '';
-      if (user.createdAt) {
-        try {
-          fecha = format(new Date(user.createdAt), 'dd MMM yyyy', { locale: es });
-        } catch {
-          fecha = user.createdAt;
-        }
-      }
-      return [
-        user.id,
-        user.fullName,
-        user.apellido,
-        user.Genero,
-        user.numcontrol,
-        user.email,
-        carrera,
-        campus,
-        user.rol,
-        user.status,
-        fecha
-      ];
+    const response = await fetchAPI('/api/users?populate=*');
+    const users = response.data || [];
+    const filas = users.map((user: any) => {
+      const attrs = user.attributes || user;
+      return {
+        "ID": user.id || attrs.id || '',
+        "Username": attrs.username || '',
+        "Apellido": attrs.apellido || '',
+        "Email": attrs.email || '',
+        "Numcontrol": attrs.Numcontrol || '',
+        "Genero": attrs.Genero || '',
+        "Estado": attrs.Estado || '',
+        "Rol": attrs.rol || '',
+        "Carrera": attrs.carrera?.data?.attributes?.Nombre || attrs.carrera?.Nombre || '',
+        "Campus": attrs.campus?.data?.attributes?.Nombre || attrs.campus?.Nombre || '',
+        "Creado": attrs.createdAt ? new Date(attrs.createdAt).toLocaleString('es-MX', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Mexico_City' }) : '',
+        "Actualizado": attrs.updatedAt ? new Date(attrs.updatedAt).toLocaleString('es-MX', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Mexico_City' }) : '',
+        "Publicado": attrs.publishedAt ? new Date(attrs.publishedAt).toLocaleString('es-MX', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Mexico_City' }) : '',
+        "Confirmado": attrs.confirmed || false,
+        "Bloqueado": attrs.blocked || false,
+        "Provider": attrs.provider || '',
+        "Reset Password Token": attrs.resetPasswordToken || '',
+        "Confirmation Token": attrs.confirmationToken || '',
+        "Loans": attrs.loans?.data?.length || 0,
+        "Consultas": attrs.consultas?.data?.length || 0,
+        "Entradas": attrs.entradas?.data?.length || 0
+      };
     });
-    // Crear hoja de Excel
-    const ws = XLSX.utils.aoa_to_sheet([encabezados, ...filas]);
+    const ws = XLSX.utils.json_to_sheet(filas);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Usuarios");
-    // Ajustar anchos de columna automáticamente
-    const colWidths = encabezados.map((k, i) =>
-      Math.max(k.length, ...filas.map((f: any) => String(f[i] || '').length))
-    );
-    ws['!cols'] = colWidths.map(w => ({ wch: w }));
-    // Generar y descargar el archivo
     const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
     const blob = new Blob([excelBuffer], { type: "application/octet-stream" });
-    saveAs(blob, "usuarios.xlsx");
-    // Mensaje de éxito
+    saveAs(blob, "usuarios_completos.xlsx");
     console.log("Excel de usuarios generado exitosamente");
-  } catch (error: any) {
-    console.error("Error al descargar usuarios:", error);
-    let errorMessage = "Error al descargar usuarios.";
-    if (error?.message) {
-      errorMessage += ` ${error.message}`;
-    }
-    alert(errorMessage);
+  } catch (error) {
+    alert("Error al descargar usuarios");
   }
 }
 
@@ -1544,6 +1526,82 @@ const formatDisplayDateRange = (dateRange?: DateRange) => {
     return 'Rango Completo';
   }
 };
+
+// 7. Entradas (Logins y Consultas Presenciales)
+async function descargarEntradasExcel(dateRange?: DateRange) {
+  try {
+    let page = 1;
+    const pageSize = 1000;
+    let total = 0;
+    let entradas: any[] = [];
+    do {
+      const response = await fetchAPI(`/api/entradas?populate[0]=Usuario&populate[1]=Bibliotecario&populate[2]=Campus&populate[3]=Usuario.carrera&populate[4]=Usuario.campus&populate[5]=Bibliotecario.carrera&populate[6]=Bibliotecario.campus&pagination[page]=${page}&pagination[pageSize]=${pageSize}`);
+      const data = response.data || [];
+      if (page === 1) {
+        total = response.meta?.pagination?.total || data.length;
+      }
+      entradas = entradas.concat(data);
+      page++;
+    } while (entradas.length < total);
+
+    // Filtrar por rango de fechas
+    const filteredEntradas = entradas.filter((entrada: any) => {
+      const fecha = new Date(entrada.Fecha || entrada.attributes?.Fecha);
+      if (!dateRange?.from && !dateRange?.to) return true;
+      const from = dateRange?.from ? new Date(dateRange.from) : null;
+      const to = dateRange?.to ? new Date(dateRange.to) : null;
+      if (from && fecha < from) return false;
+      if (to && fecha > to) return false;
+      return true;
+    });
+
+    const filas = filteredEntradas.map((entrada: any) => {
+      const attrs = entrada.attributes || entrada;
+      // Usuario
+      const usuario = attrs.Usuario?.data?.attributes || attrs.Usuario || {};
+      // Bibliotecario
+      const bibliotecario = attrs.Bibliotecario?.data?.attributes || attrs.Bibliotecario || {};
+      // Campus
+      let campus = attrs.Campus?.data?.attributes?.Nombre || attrs.Campus?.Nombre || '';
+      return {
+        "ID": entrada.id || attrs.id || '',
+        "Tipo": attrs.Tipo || '',
+        "Usuario": usuario.username || '',
+        "ID Usuario": attrs.Usuario?.data?.id || usuario.id || '',
+        "Email Usuario": usuario.email || '',
+        "Apellido Usuario": usuario.apellido || '',
+        "Numcontrol Usuario": usuario.Numcontrol || '',
+        "Genero Usuario": usuario.Genero || '',
+        "Estado Usuario": usuario.Estado || '',
+        "Rol Usuario": usuario.rol || '',
+        "Carrera Usuario": usuario.carrera?.data?.attributes?.Nombre || usuario.carrera?.Nombre || '',
+        "Campus Usuario": usuario.campus?.data?.attributes?.Nombre || usuario.campus?.Nombre || '',
+        "Bibliotecario": bibliotecario.username || '',
+        "ID Bibliotecario": attrs.Bibliotecario?.data?.id || bibliotecario.id || '',
+        "Email Bibliotecario": bibliotecario.email || '',
+        "Apellido Bibliotecario": bibliotecario.apellido || '',
+        "Numcontrol Bibliotecario": bibliotecario.Numcontrol || '',
+        "Genero Bibliotecario": bibliotecario.Genero || '',
+        "Estado Bibliotecario": bibliotecario.Estado || '',
+        "Rol Bibliotecario": bibliotecario.rol || '',
+        "Carrera Bibliotecario": bibliotecario.carrera?.data?.attributes?.Nombre || bibliotecario.carrera?.Nombre || '',
+        "Campus Bibliotecario": bibliotecario.campus?.data?.attributes?.Nombre || bibliotecario.campus?.Nombre || '',
+        "Fecha": attrs.Fecha ? new Date(attrs.Fecha).toLocaleString('es-MX', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Mexico_City' }) : '',
+        "Campus": campus
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(filas);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Entradas");
+    const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([excelBuffer], { type: "application/octet-stream" });
+    const filenameDatePart = formatFilenameDateRange(dateRange);
+    saveAs(blob, `entradas_${filenameDatePart}.xlsx`);
+    console.log("Excel de entradas generado exitosamente");
+  } catch (error) {
+    alert("Error al descargar entradas");
+  }
+}
 
 export default function ReportesPage() {
   // Todos los hooks primero en un orden consistente
@@ -1612,14 +1670,17 @@ export default function ReportesPage() {
   const [prestamosTotales, setPrestamosTotales] = useState(0);
 
   // Añadir nuevo estado para el rango de fechas
+  const today = new Date();
+  const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: undefined,
-    to: new Date(),
+    from: firstDayOfMonth,
+    to: lastDayOfMonth,
   });
   // Estado global para los préstamos
   const [loans, setLoans] = useState<Loan[]>([]);
   // Estado para el tipo de rango seleccionado
-  const [quickSelect, setQuickSelect] = useState<string>("custom");
+  const [quickSelect, setQuickSelect] = useState<string>("month");
 
   // Añadir estado para las columnas seleccionadas
   const [selectedColumns, setSelectedColumns] = useState<string[]>(
@@ -1842,72 +1903,102 @@ export default function ReportesPage() {
         });
         
         // Procesar datos para el gráfico de préstamos vs devoluciones
-        // Crear un objeto para almacenar préstamos y devoluciones por mes
-        const datosPorMes: Record<number, { prestados: number, devueltos: number }> = {};
-        
-        // Inicializar los datos para los últimos 12 meses
-        const fechaActual = new Date();
-        const añoActual = fechaActual.getFullYear();
-        const mesActualIndex = fechaActual.getMonth();
-        
-        // Inicializar los últimos 7 meses con valores en cero
-        for (let i = 0; i < 7; i++) {
-          const mesIndex = (mesActualIndex - i + 12) % 12; // Asegurarse de que el índice sea positivo
-          datosPorMes[mesIndex] = { prestados: 0, devueltos: 0 };
-        }
-        
-        // Contar préstamos por mes (últimos 12 meses)
+        // Si el rango es de 31 días o menos, agrupar por día; si es mayor, agrupar por mes
+        let datosGrafico: { name: string; prestados: number; devueltos: number }[] = [];
+        if (dateRange?.from && dateRange?.to) {
+          let start = new Date(dateRange.from);
+          let end = new Date(dateRange.to);
+          // Si el rango es solo hoy, incluir también el día anterior
+          const isOnlyToday = start.toDateString() === end.toDateString() && start.toDateString() === new Date().toDateString();
+          if (isOnlyToday) {
+            // Ajustar el rango para incluir ayer y hoy
+            start.setDate(start.getDate() - 1);
+          }
+          // Incluir ambos extremos del rango
+          const diffTime = endOfDay(end).getTime() - startOfDay(start).getTime();
+          const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+          if (diffDays <= 31) {
+            // Agrupar por día
+            const datosPorDia: Record<string, { prestados: number, devueltos: number }> = {};
+            let current = new Date(start);
+            while (current <= end) {
+              const key = current.toISOString().slice(0, 10); // yyyy-mm-dd
+              datosPorDia[key] = { prestados: 0, devueltos: 0 };
+              current.setDate(current.getDate() + 1);
+            }
         filteredLoans.forEach((loan: Loan) => {
           const fechaPrestamo = new Date(loan.fecha_prestamo);
-          const mesPrestamo = fechaPrestamo.getMonth();
-          const añoPrestamo = fechaPrestamo.getFullYear();
-          
-          // Solo considerar datos de los últimos 7 meses
-          if (
-            (añoPrestamo === añoActual && mesPrestamo <= mesActualIndex && mesPrestamo > mesActualIndex - 7) || 
-            (añoPrestamo === añoActual - 1 && mesPrestamo > (mesActualIndex + 12) - 7)
-          ) {
-            if (datosPorMes[mesPrestamo]) {
-              datosPorMes[mesPrestamo].prestados += 1;
-            } else {
-              datosPorMes[mesPrestamo] = { prestados: 1, devueltos: 0 };
-            }
-          }
-          
-          // Si el préstamo está devuelto, contar también como devolución
+              const keyPrestamo = fechaPrestamo.toISOString().slice(0, 10);
+              if (datosPorDia[keyPrestamo]) {
+                datosPorDia[keyPrestamo].prestados += 1;
+              }
           if (loan.estado === 'devuelto' && loan.fecha_devolucion_real) {
             const fechaDevolucion = new Date(loan.fecha_devolucion_real);
-            const mesDevolucion = fechaDevolucion.getMonth();
-            const añoDevolucion = fechaDevolucion.getFullYear();
-            
-            // Solo considerar datos de los últimos 7 meses
-            if (
-              (añoDevolucion === añoActual && mesDevolucion <= mesActualIndex && mesDevolucion > mesActualIndex - 7) || 
-              (añoDevolucion === añoActual - 1 && mesDevolucion > (mesActualIndex + 12) - 7)
-            ) {
-              if (datosPorMes[mesDevolucion]) {
-                datosPorMes[mesDevolucion].devueltos += 1;
-              } else {
-                datosPorMes[mesDevolucion] = { prestados: 0, devueltos: 1 };
+                const keyDevolucion = fechaDevolucion.toISOString().slice(0, 10);
+                if (datosPorDia[keyDevolucion]) {
+                  datosPorDia[keyDevolucion].devueltos += 1;
+                }
               }
+            });
+            datosGrafico = Object.keys(datosPorDia)
+              .sort()
+              .map(key => {
+                const [year, month, day] = key.split('-');
+                const dateObj = new Date(Number(year), Number(month) - 1, Number(day));
+                const diasCortos = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+                const nombreDia = diasCortos[dateObj.getDay()];
+                return {
+                  name: `${nombreDia} ${day}/${month}`,
+                  prestados: datosPorDia[key].prestados,
+                  devueltos: datosPorDia[key].devueltos
+                };
+              });
+              } else {
+            // Agrupar por mes (incluyendo el mes anterior)
+            const datosPorMes: Record<string, { prestados: number, devueltos: number }> = {};
+            // Agregar el mes anterior al inicio del rango
+            const prevMonth = new Date(start);
+            prevMonth.setMonth(prevMonth.getMonth() - 1);
+            const prevKey = `${prevMonth.getFullYear()}-${prevMonth.getMonth()}`;
+            datosPorMes[prevKey] = { prestados: 0, devueltos: 0 };
+            // Generar todos los meses entre start y end
+            let current = new Date(start);
+            while (current <= end) {
+              const key = `${current.getFullYear()}-${current.getMonth()}`;
+              datosPorMes[key] = { prestados: 0, devueltos: 0 };
+              current.setMonth(current.getMonth() + 1);
+            }
+            filteredLoans.forEach((loan: Loan) => {
+              const fechaPrestamo = new Date(loan.fecha_prestamo);
+              const keyPrestamo = `${fechaPrestamo.getFullYear()}-${fechaPrestamo.getMonth()}`;
+              if (datosPorMes[keyPrestamo]) {
+                datosPorMes[keyPrestamo].prestados += 1;
+              }
+              if (loan.estado === 'devuelto' && loan.fecha_devolucion_real) {
+                const fechaDevolucion = new Date(loan.fecha_devolucion_real);
+                const keyDevolucion = `${fechaDevolucion.getFullYear()}-${fechaDevolucion.getMonth()}`;
+                if (datosPorMes[keyDevolucion]) {
+                  datosPorMes[keyDevolucion].devueltos += 1;
             }
           }
         });
-        
-        // Convertir los datos a un formato adecuado para el gráfico
-        const datosGrafico = [];
-        // Mostrar los últimos 7 meses en orden cronológico
-        for (let i = 6; i >= 0; i--) {
-          const mesIndex = (mesActualIndex - i + 12) % 12;
-          if (datosPorMes[mesIndex]) {
-            datosGrafico.push({
-              name: nombresMeses[mesIndex],
-              prestados: datosPorMes[mesIndex].prestados,
-              devueltos: datosPorMes[mesIndex].devueltos
+            datosGrafico = Object.keys(datosPorMes)
+              .sort((a, b) => {
+                const [ay, am] = a.split('-').map(Number);
+                const [by, bm] = b.split('-').map(Number);
+                return ay !== by ? ay - by : am - bm;
+              })
+              .map(key => {
+                const [year, month] = key.split('-').map(Number);
+                return {
+                  name: `${nombresMeses[month]} ${year}`,
+                  prestados: datosPorMes[key].prestados,
+                  devueltos: datosPorMes[key].devoluciones,
+                  activos: datosPorMes[key].prestados + datosPorMes[key].devoluciones
+                };
             });
           }
         }
-        
         setLoanStatsChartData(datosGrafico);
         
         // Calcular los usuarios más activos
@@ -1928,13 +2019,23 @@ export default function ReportesPage() {
             
             const userId = loan.usuario.id?.toString() || '';
             const userName = loan.usuario.username || 'Usuario Desconocido';
+            const userApellido = loan.usuario.apellido || '';
+            const userFullName = userApellido ? `${userName} ${userApellido}` : userName;
             const userMatricula = loan.usuario.Numcontrol || userId;
-            const userCareer = loan.usuario.Carrera || 'No especificada';
+            // Obtener carrera correctamente
+            let userCareer = '';
+            const carrera = loan.usuario.carrera;
+            if (typeof carrera === 'object' && carrera !== null) {
+              userCareer = carrera.Nombre || carrera.attributes?.Nombre || carrera.data?.attributes?.Nombre || '';
+            } else if (typeof carrera === 'string') {
+              userCareer = carrera;
+            }
+            if (!userCareer) userCareer = 'No especificada';
             const loanDate = new Date(loan.fecha_prestamo);
             
             if (!userLoanMap[userId]) {
               userLoanMap[userId] = {
-                name: userName,
+                name: userFullName,
                 id: userMatricula,
                 career: userCareer,
                 loans: 0,
@@ -1967,49 +2068,105 @@ export default function ReportesPage() {
           console.error("Error al procesar usuarios más activos:", error);
         }
         
-        // Procesar los datos de actividad por día de la semana
+        // Procesar los datos de actividad por día de la semana o por mes
         try {
-          // Inicializar datos por día de la semana para préstamos y devoluciones
-          const actividadPorDia: Record<string, { prestamos: number, devoluciones: number }> = {
-            "Dom": { prestamos: 0, devoluciones: 0 },
-            "Lun": { prestamos: 0, devoluciones: 0 },
-            "Mar": { prestamos: 0, devoluciones: 0 },
-            "Mié": { prestamos: 0, devoluciones: 0 },
-            "Jue": { prestamos: 0, devoluciones: 0 },
-            "Vie": { prestamos: 0, devoluciones: 0 },
-            "Sáb": { prestamos: 0, devoluciones: 0 }
-          };
-          
-          // Procesar todos los préstamos
+          const diasSemana = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+          let datosGraficoActividad: { name: string; prestamos: number; devoluciones: number; activos: number }[] = [];
+          if (dateRange?.from && dateRange?.to) {
+            let start = new Date(dateRange.from);
+            let end = new Date(dateRange.to);
+            // Si el rango es solo hoy, incluir también el día anterior
+            const isOnlyToday = start.toDateString() === end.toDateString() && start.toDateString() === new Date().toDateString();
+            if (isOnlyToday) {
+              start.setDate(start.getDate() - 1);
+            }
+            // Incluir ambos extremos del rango
+            const diffTime = endOfDay(end).getTime() - startOfDay(start).getTime();
+            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+            // Agrupar por día si el rango es de 31 días o menos, o si cubre exactamente un mes natural
+            const isFullMonth = start.getDate() === 1 &&
+              (end.getMonth() === start.getMonth()) &&
+              (end.getDate() === new Date(end.getFullYear(), end.getMonth() + 1, 0).getDate());
+            if (diffDays <= 31 || isFullMonth) {
+              // Agrupar por día (mostrar todos los días del rango)
+              const actividadPorDia: Record<string, { prestamos: number, devoluciones: number }> = {};
+              let current = new Date(start);
+              while (current <= end) {
+                const key = current.toISOString().slice(0, 10); // yyyy-mm-dd
+                actividadPorDia[key] = { prestamos: 0, devoluciones: 0 };
+                current.setDate(current.getDate() + 1);
+              }
+              filteredLoans.forEach(loan => {
+                const fechaPrestamo = new Date(loan.fecha_prestamo);
+                const keyPrestamo = fechaPrestamo.toISOString().slice(0, 10);
+                if (actividadPorDia[keyPrestamo]) {
+                  actividadPorDia[keyPrestamo].prestamos += 1;
+                }
+                if (loan.estado === 'devuelto' && loan.fecha_devolucion_real) {
+                  const fechaDevolucion = new Date(loan.fecha_devolucion_real);
+                  const keyDevolucion = fechaDevolucion.toISOString().slice(0, 10);
+                  if (actividadPorDia[keyDevolucion]) {
+                    actividadPorDia[keyDevolucion].devoluciones += 1;
+                  }
+                }
+              });
+              datosGraficoActividad = Object.keys(actividadPorDia)
+                .sort()
+                .map(key => {
+                  const [year, month, day] = key.split('-');
+                  const dateObj = new Date(Number(year), Number(month) - 1, Number(day));
+                  const diasCortos = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+                  const nombreDia = diasCortos[dateObj.getDay()];
+                  return {
+                    name: `${nombreDia} ${day}/${month}`,
+                    prestamos: actividadPorDia[key].prestamos,
+                    devoluciones: actividadPorDia[key].devoluciones,
+                    activos: actividadPorDia[key].prestamos + actividadPorDia[key].devoluciones
+                  };
+                });
+            } else {
+              // Agrupar por mes
+              const actividadPorMes: Record<string, { prestamos: number, devoluciones: number }> = {};
+              // Generar todos los meses entre start y end
+              let current = new Date(start.getFullYear(), start.getMonth(), 1);
+              const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+              while (current <= endMonth) {
+                const key = `${current.getFullYear()}-${current.getMonth()}`;
+                actividadPorMes[key] = { prestamos: 0, devoluciones: 0 };
+                current.setMonth(current.getMonth() + 1);
+              }
           filteredLoans.forEach(loan => {
-            // Fecha de préstamo
             const fechaPrestamo = new Date(loan.fecha_prestamo);
-            const diaPrestamo = diasSemana[fechaPrestamo.getDay()]; // getDay() retorna 0-6 (Domingo-Sábado)
-            
-            // Incrementar contador de préstamos para ese día
-            actividadPorDia[diaPrestamo].prestamos += 1;
-            
-            // Si el préstamo tiene fecha de devolución, contar también
+                const keyPrestamo = `${fechaPrestamo.getFullYear()}-${fechaPrestamo.getMonth()}`;
+                if (actividadPorMes[keyPrestamo]) {
+                  actividadPorMes[keyPrestamo].prestamos += 1;
+                }
             if (loan.estado === 'devuelto' && loan.fecha_devolucion_real) {
               const fechaDevolucion = new Date(loan.fecha_devolucion_real);
-              const diaDevolucion = diasSemana[fechaDevolucion.getDay()];
-              
-              // Incrementar contador de devoluciones para ese día
-              actividadPorDia[diaDevolucion].devoluciones += 1;
+                  const keyDevolucion = `${fechaDevolucion.getFullYear()}-${fechaDevolucion.getMonth()}`;
+                  if (actividadPorMes[keyDevolucion]) {
+                    actividadPorMes[keyDevolucion].devoluciones += 1;
+                  }
+                }
+              });
+              datosGraficoActividad = Object.keys(actividadPorMes)
+                .sort((a, b) => {
+                  const [ay, am] = a.split('-').map(Number);
+                  const [by, bm] = b.split('-').map(Number);
+                  return ay !== by ? ay - by : am - bm;
+                })
+                .map(key => {
+                  const [year, month] = key.split('-').map(Number);
+                  return {
+                    name: `${nombresMeses[month]} ${year}`,
+                    prestados: actividadPorMes[key].prestamos,
+                    devueltos: actividadPorMes[key].devoluciones,
+                    activos: actividadPorMes[key].prestamos + actividadPorMes[key].devoluciones
+                  };
+                });
             }
-          });
-          
-          // Convertir a formato para la gráfica (ordenar días de lunes a domingo)
-          const diasOrdenados = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
-          const datosGrafico = diasOrdenados.map(dia => ({
-            name: dia,
-            prestamos: actividadPorDia[dia].prestamos,
-            devoluciones: actividadPorDia[dia].devoluciones,
-            // Para mantener compatibilidad con la gráfica existente
-            activos: actividadPorDia[dia].prestamos + actividadPorDia[dia].devoluciones
-          }));
-          
-          setUserActivityChartData(datosGrafico);
+          }
+          setUserActivityChartData(datosGraficoActividad);
         } catch (error) {
           console.error("Error al procesar datos de actividad por día:", error);
         }
@@ -2211,8 +2368,7 @@ export default function ReportesPage() {
             </Button>
           <Button 
             onClick={() => generarInformeOficial(dateRange)} 
-            variant="outline" 
-            className="bg-black text-white dark:bg-white dark:text-black tec:bg-tec-primary tec:text-white !hover:bg-black !hover:text-white dark:!hover:bg-white dark:!hover:text-black tec:!hover:bg-tec-primary tec:!hover:text-white"
+            className="flex items-center gap-2"
           >
               <FileText className="mr-2 h-4 w-4" />
               Generar Informe ({formatDisplayDateRange(dateRange)})
@@ -2365,7 +2521,7 @@ export default function ReportesPage() {
                 <div className="flex items-center space-x-2">
                   <Badge variant="outline" className="text-sm">
                     <Calendar className="h-3.5 w-3.5 mr-1" />
-                    Últimos 7 meses
+                    {formatDisplayDateRange(dateRange)}
                   </Badge>
                   <Badge variant="outline" className="text-sm">
                     <LineChart className="h-3.5 w-3.5 mr-1" />
@@ -2442,23 +2598,35 @@ export default function ReportesPage() {
                   </ResponsiveContainer>
                 </div>
               </CardContent>
-              <CardFooter className="flex justify-between">
-                <Button variant="outline" size="sm">
-                  <Calendar className="mr-2 h-4 w-4" />
-                  Filtrar por fecha
-                </Button>
-                <Button variant="outline" size="sm">
-                  <Download className="mr-2 h-4 w-4" />
-                  Exportar
-                </Button>
-              </CardFooter>
             </Card>
             
             <Card className="col-span-1">
               <CardHeader>
                 <CardTitle>Actividad de Usuarios</CardTitle>
                 <CardDescription>
-                  Actividad total (préstamos + devoluciones) por día
+                  {(() => {
+                    if (dateRange?.from && dateRange?.to) {
+                      const start = new Date(dateRange.from);
+                      const end = new Date(dateRange.to);
+                      const diffTime = endOfDay(end).getTime() - startOfDay(start).getTime();
+                      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                      const isFullMonth = start.getDate() === 1 &&
+                        (end.getMonth() === start.getMonth()) &&
+                        (end.getDate() === new Date(end.getFullYear(), end.getMonth() + 1, 0).getDate());
+                      // Detectar si es una semana exacta
+                      const isFullWeek = diffDays === 7 && start.getDay() === 1 && end.getDay() === 0;
+                      if (isFullWeek) {
+                        return 'Actividad total (préstamos + devoluciones) por día (vista semanal)';
+                      } else if (isFullMonth) {
+                        return 'Actividad total (préstamos + devoluciones) por día (vista mensual)';
+                      } else if (diffDays <= 31) {
+                        return 'Actividad total (préstamos + devoluciones) por día (vista personalizada)';
+                      } else {
+                        return 'Actividad total (préstamos + devoluciones) por mes';
+                      }
+                    }
+                    return 'Actividad total (préstamos + devoluciones)';
+                  })()}
                 </CardDescription>
               </CardHeader>
               <CardContent className="pl-2">
@@ -2511,16 +2679,6 @@ export default function ReportesPage() {
                   </ResponsiveContainer>
                 </div>
               </CardContent>
-              <CardFooter className="flex justify-between">
-                <Button variant="outline" size="sm">
-                  <Calendar className="mr-2 h-4 w-4" />
-                  Filtrar por fecha
-                </Button>
-                <Button variant="outline" size="sm">
-                  <Download className="mr-2 h-4 w-4" />
-                  Exportar
-                </Button>
-              </CardFooter>
             </Card>
           </div>
         </TabsContent>
@@ -2623,12 +2781,6 @@ export default function ReportesPage() {
                 </table>
               </div>
             </CardContent>
-            <CardFooter className="flex justify-end">
-              <Button variant="outline" size="sm">
-                <Download className="mr-2 h-4 w-4" />
-                Exportar a Excel
-              </Button>
-            </CardFooter>
           </Card>
         </TabsContent>
       </Tabs>
@@ -2644,12 +2796,13 @@ export default function ReportesPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {[
               { title: "Inventario Completo", description: "Lista completa de todos los libros en el sistema", icon: <FileText className="h-5 w-5" />, color: "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400", onClick: () => setShowInventarioModal(true) },
-              { title: "Préstamos Mensuales", description: "Reporte de préstamos del mes actual", icon: <FileBarChart className="h-5 w-5" />, color: "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400", onClick: descargarPrestamosMensuales },
+              { title: `Préstamos en el periodo`, description: `Reporte de préstamos de ${formatDisplayDateRange(dateRange)}`, icon: <FileBarChart className="h-5 w-5" />, color: "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400", onClick: () => descargarPrestamosMensuales('excel', dateRange, selectedColumns) },
               { title: "Usuarios por Carrera", description: "Distribución de usuarios por carrera", icon: <PieChart className="h-5 w-5" />, color: "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400", onClick: descargarUsuariosPorCarrera },
               { title: "Devoluciones Pendientes", description: "Préstamos con devolución pendiente", icon: <FileText className="h-5 w-5" />, color: "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400", onClick: descargarDevolucionesPendientes },
-              { title: "Top Libros del Semestre", description: "Libros más prestados este semestre", icon: <BarChart className="h-5 w-5" />, color: "bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400", onClick: descargarTopLibrosSemestre },
-              { title: "Historial de Devoluciones", description: "Histórico de devoluciones por mes", icon: <LineChart className="h-5 w-5" />, color: "bg-cyan-100 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400", onClick: descargarHistorialDevoluciones },
+              { title: `Top Libros del periodo`, description: `Libros más prestados en ${formatDisplayDateRange(dateRange)}`, icon: <BarChart className="h-5 w-5" />, color: "bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400", onClick: () => descargarTopLibrosSemestre(dateRange) },
+              { title: `Historial de Devoluciones`, description: `Devoluciones registradas en ${formatDisplayDateRange(dateRange)}`, icon: <LineChart className="h-5 w-5" />, color: "bg-cyan-100 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400", onClick: () => descargarHistorialDevoluciones(dateRange) },
               { title: "Usuarios (Excel)", description: "Exporta todos los usuarios como se ven en la tabla", icon: <Users className="h-5 w-5" />, color: "bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400", onClick: descargarUsuariosExcel },
+              { title: "Entradas (Logins y Consultas Presenciales)", description: `Entradas registradas en ${formatDisplayDateRange(dateRange)}`, icon: <FileText className="h-5 w-5" />, color: "bg-fuchsia-100 dark:bg-fuchsia-900/30 text-fuchsia-600 dark:text-fuchsia-400", onClick: () => descargarEntradasExcel(dateRange) },
             ].map((report, i) => (
               <div key={i} className="flex flex-col border rounded-lg overflow-hidden transition-all hover:shadow-md">
                 <div className="p-4 flex items-start gap-4">

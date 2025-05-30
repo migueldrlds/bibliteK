@@ -364,6 +364,7 @@ export default function EntradasPage() {
                     autoFocus
                     disabled={buscandoUsuario}
                     className="flex-1"
+                    onKeyDown={e => { if (e.key === 'Enter') { handleBuscarUsuario(); } }}
                   />
                   <Button onClick={handleBuscarUsuario} disabled={!numControl || buscandoUsuario} variant="secondary">
                     {buscandoUsuario ? "Buscando..." : "Buscar"}

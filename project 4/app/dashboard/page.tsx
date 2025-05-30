@@ -38,7 +38,10 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
-  Legend 
+  Legend,
+  PieChart,
+  Pie,
+  Cell
 } from "recharts";
 import { useEffect, useState } from 'react';
 import { bookService, Book } from '@/services/bookService';
@@ -98,12 +101,29 @@ const loanData = [
   { name: "Dic", loans: 67 },
 ];
 
-const categoryData = [
-  { name: "Ciencias", value: 120 },
-  { name: "Ingeniería", value: 95 },
-  { name: "Literatura", value: 75 },
-  { name: "Historia", value: 60 },
-  { name: "Matemáticas", value: 45 },
+// Lista de categorías LCC igual que el filtro
+const lccCategories = [
+  { value: "A", label: "A - Generalidades" },
+  { value: "B", label: "B - Filosofía, Psicología, Religión" },
+  { value: "C", label: "C - Ciencias Auxiliares de la Historia" },
+  { value: "D", label: "D - Historia (General)" },
+  { value: "E", label: "E - Historia de América" },
+  { value: "F", label: "F - Historia de América" },
+  { value: "G", label: "G - Geografía, Antropología, Recreación" },
+  { value: "H", label: "H - Ciencias Sociales" },
+  { value: "J", label: "J - Ciencia Política" },
+  { value: "K", label: "K - Derecho" },
+  { value: "L", label: "L - Educación" },
+  { value: "M", label: "M - Música" },
+  { value: "N", label: "N - Bellas Artes" },
+  { value: "P", label: "P - Lengua y Literatura" },
+  { value: "Q", label: "Q - Ciencia" },
+  { value: "R", label: "R - Medicina" },
+  { value: "S", label: "S - Agricultura" },
+  { value: "T", label: "T - Tecnología" },
+  { value: "U", label: "U - Ciencia Militar" },
+  { value: "V", label: "V - Ciencia Naval" },
+  { value: "Z", label: "Z - Bibliografía y Ciencias de la Información" },
 ];
 
 // Utilidad para pluralizar 'préstamo'
@@ -396,14 +416,22 @@ export default function DashboardPage() {
   const processBookCategories = (books: Book[]): CategoryData[] => {
     const categories: Record<string, number> = {};
     books.forEach(book => {
-      const category = book.clasificacion || 'Sin categoría';
+      // Tomar la letra inicial de la clasificación LCC
+      const lcc = (book.clasificacion_lcc || book.clasificacion || '').trim().toUpperCase();
+      const letter = lcc.charAt(0);
+      // Buscar la etiqueta completa en la lista lccCategories
+      const lccCat = lccCategories.find(cat => cat.value === letter);
+      const category = lccCat ? lccCat.label : 'Sin categoría';
       categories[category] = (categories[category] || 0) + 1;
     });
-
-    return Object.entries(categories).map(([name, value]) => ({
-      name,
-      value
-    }));
+    // Mantener el orden de lccCategories y agregar 'Sin categoría' al final si existe
+    const ordered = lccCategories
+      .map(cat => ({ name: cat.label, value: categories[cat.label] || 0 }))
+      .filter(cat => cat.value > 0);
+    if (categories['Sin categoría']) {
+      ordered.push({ name: 'Sin categoría', value: categories['Sin categoría'] });
+    }
+    return ordered;
   };
 
   const handleUserClick = async (userId: string, userName: string) => {
@@ -756,49 +784,55 @@ export default function DashboardPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="pl-2">
-              <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={categoryData}
-                    layout="vertical"
-                    margin={{
-                      top: 5,
-                      right: 30,
-                      left: 20,
-                      bottom: 5,
-                    }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                    <XAxis 
-                      type="number" 
-                      className="text-xs" 
-                      stroke="hsl(var(--muted-foreground))" 
-                    />
-                    <YAxis 
-                      dataKey="name" 
-                      type="category" 
-                      scale="band" 
-                      className="text-xs" 
-                      stroke="hsl(var(--muted-foreground))"
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        borderColor: "hsl(var(--border))",
-                        borderRadius: "var(--radius)",
-                      }}
-                      labelStyle={{
-                        color: "hsl(var(--card-foreground))",
-                      }}
-                    />
-                    <Bar 
-                      dataKey="value" 
-                      fill="#2563EB" 
-                      radius={[0, 4, 4, 0]} 
-                      name="Cantidad"
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
+              <div className="flex flex-row h-[300px] w-full">
+                <div className="w-2/3 h-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={categoryData}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={100}
+                        fill="#8884d8"
+                        label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                        labelLine={false}
+                      >
+                        {categoryData.map((entry, index) => (
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={[
+                              '#2563EB','#16A34A','#DC2626','#D97706','#7C3AED','#0891B2','#4F46E5','#EA580C','#059669','#6D28D9',
+                              '#F59E42','#F472B6','#10B981','#FBBF24','#6366F1','#F43F5E','#A21CAF','#0EA5E9','#FACC15','#14B8A6','#E11D48',
+                            ][index % 21]}
+                          />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="w-1/3 flex flex-col justify-center pl-4 overflow-y-auto max-h-[300px]">
+                  <ul className="space-y-2 text-sm">
+                    {categoryData.map((cat, idx) => (
+                      <li key={cat.name} className="flex items-center gap-2">
+                        <span style={{
+                          display: 'inline-block',
+                          width: 14,
+                          height: 14,
+                          backgroundColor: [
+                            '#2563EB','#16A34A','#DC2626','#D97706','#7C3AED','#0891B2','#4F46E5','#EA580C','#059669','#6D28D9',
+                            '#F59E42','#F472B6','#10B981','#FBBF24','#6366F1','#F43F5E','#A21CAF','#0EA5E9','#FACC15','#14B8A6','#E11D48',
+                          ][idx % 21],
+                          borderRadius: 3,
+                          marginRight: 6,
+                        }} />
+                        <span className="truncate" title={cat.name}>{cat.name}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
             </CardContent>
           </Card>
