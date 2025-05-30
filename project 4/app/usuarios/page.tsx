@@ -78,6 +78,7 @@ import {
   UserRound,
   Users,
   X,
+  AtSign,
 } from "lucide-react";
 import {
   Card,
@@ -213,6 +214,8 @@ export default function UsuariosPage() {
   const [careers, setCareers] = useState<any[]>([]);
   const [selectedEditCareerId, setSelectedEditCareerId] = useState<string>("");
   const [showPermanentDeleteDialog, setShowPermanentDeleteDialog] = useState(false);
+  const [emailUserPart, setEmailUserPart] = useState("");
+  const emailDomain = "@tectijuana.edu.mx";
 
   // Configurar el formulario de creación de usuario con React Hook Form
   const form = useForm<CreateUserFormValues>({
@@ -1047,6 +1050,22 @@ export default function UsuariosPage() {
                                 Dar de baja
                               </DropdownMenuItem>
                             )}
+                            {user?.role?.toLowerCase() === "administrador" && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem 
+                                  className="text-red-600 focus:text-red-600"
+                                  onSelect={(e) => e.preventDefault()}
+                                  onClick={() => {
+                                    setSelectedUser(rowUser);
+                                    setShowPermanentDeleteDialog(true);
+                                  }}
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Eliminar permanentemente
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </>
                         )}
                       </DropdownMenuContent>
@@ -1146,7 +1165,31 @@ export default function UsuariosPage() {
                             Correo electrónico <span className="text-rose-500">*</span>
                           </FormLabel>
                           <FormControl>
-                            <Input type="email" placeholder="correo@ejemplo.com" {...field} className="h-9" />
+                            <div className="flex h-9 w-full items-center rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+                              <AtSign className="h-5 w-5 text-muted-foreground mr-2 flex-shrink-0" />
+                              <Input
+                                placeholder="tu.usuario"
+                                className="flex-grow p-0 border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent h-auto"
+                                value={emailUserPart}
+                                onChange={(e) => {
+                                  const rawValue = e.target.value;
+                                  let userTypedPart = rawValue;
+                                  let fullEmailForValidation = "";
+                                  if (rawValue.endsWith(emailDomain)) {
+                                    userTypedPart = rawValue.substring(0, rawValue.length - emailDomain.length);
+                                    fullEmailForValidation = rawValue;
+                                  } else {
+                                    userTypedPart = rawValue;
+                                    fullEmailForValidation = `${rawValue}${emailDomain}`;
+                                  }
+                                  setEmailUserPart(userTypedPart);
+                                  field.onChange(fullEmailForValidation);
+                                }}
+                              />
+                              <span className="text-muted-foreground whitespace-nowrap pl-1 flex-shrink-0">
+                                {emailDomain}
+                              </span>
+                            </div>
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -1626,7 +1669,31 @@ export default function UsuariosPage() {
                                 Correo electrónico <span className="text-rose-500">*</span>
                               </FormLabel>
                               <FormControl>
-                                <Input type="email" placeholder="correo@ejemplo.com" {...field} className="h-9" />
+                                <div className="flex h-9 w-full items-center rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+                                  <AtSign className="h-5 w-5 text-muted-foreground mr-2 flex-shrink-0" />
+                                  <Input
+                                    placeholder="tu.usuario"
+                                    className="flex-grow p-0 border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent h-auto"
+                                    value={emailUserPart}
+                                    onChange={(e) => {
+                                      const rawValue = e.target.value;
+                                      let userTypedPart = rawValue;
+                                      let fullEmailForValidation = "";
+                                      if (rawValue.endsWith(emailDomain)) {
+                                        userTypedPart = rawValue.substring(0, rawValue.length - emailDomain.length);
+                                        fullEmailForValidation = rawValue;
+                                      } else {
+                                        userTypedPart = rawValue;
+                                        fullEmailForValidation = `${rawValue}${emailDomain}`;
+                                      }
+                                      setEmailUserPart(userTypedPart);
+                                      field.onChange(fullEmailForValidation);
+                                    }}
+                                  />
+                                  <span className="text-muted-foreground whitespace-nowrap pl-1 flex-shrink-0">
+                                    {emailDomain}
+                                  </span>
+                                </div>
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -1834,15 +1901,28 @@ export default function UsuariosPage() {
             <AlertDialog open={showPermanentDeleteDialog} onOpenChange={setShowPermanentDeleteDialog}>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>¿Eliminar usuario permanentemente?</AlertDialogTitle>
+                  <AlertDialogTitle className="text-red-600 flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5" />
+                    Eliminación permanente de usuario
+                  </AlertDialogTitle>
                   <AlertDialogDescription>
-                    Esta acción eliminará al usuario de forma definitiva. No se podrá recuperar la información.
+                    Esta acción eliminará al usuario de forma definitiva de la base de datos. Esta operación no se puede deshacer y todos los datos asociados al usuario se perderán permanentemente.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
-                <div className="bg-muted p-3 rounded-md text-sm">
-                  <div className="font-medium">{selectedUser?.fullName}</div>
-                  <div className="text-muted-foreground">{selectedUser?.email}</div>
-                  <div className="text-muted-foreground">ID: {selectedUser?.numcontrol || selectedUser?.id}</div>
+                <div className="bg-muted p-4 rounded-md space-y-2">
+                  <div className="font-medium text-lg">{selectedUser?.fullName}</div>
+                  <div className="text-muted-foreground flex items-center gap-2">
+                    <Mail className="h-4 w-4" />
+                    {selectedUser?.email}
+                  </div>
+                  <div className="text-muted-foreground flex items-center gap-2">
+                    <Fingerprint className="h-4 w-4" />
+                    ID: {selectedUser?.numcontrol || selectedUser?.id}
+                  </div>
+                  <div className="text-muted-foreground flex items-center gap-2">
+                    <GraduationCap className="h-4 w-4" />
+                    {selectedUser?.career || 'Sin carrera asignada'}
+                  </div>
                 </div>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancelar</AlertDialogCancel>
@@ -1850,7 +1930,8 @@ export default function UsuariosPage() {
                     className="bg-red-600 text-white hover:bg-red-700"
                     onClick={handlePermanentDeleteUser}
                   >
-                    Eliminar usuario
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Eliminar permanentemente
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>

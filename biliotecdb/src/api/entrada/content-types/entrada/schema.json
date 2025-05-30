@@ -4,7 +4,8 @@
   "info": {
     "singularName": "entrada",
     "pluralName": "entradas",
-    "displayName": "Entrada"
+    "displayName": "Entrada",
+    "description": ""
   },
   "options": {
     "draftAndPublish": true
@@ -33,6 +34,12 @@
     "Fecha": {
       "type": "datetime",
       "required": true
+    },
+    "Campus": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::campus.campus",
+      "inversedBy": "entradas"
     }
   }
 }

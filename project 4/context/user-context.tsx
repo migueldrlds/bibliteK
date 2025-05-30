@@ -26,6 +26,7 @@ interface Permissions {
   canUpdateLoans: boolean;
   canDeleteLoans: boolean;
   canManageUsers: boolean;
+  canViewLoanHistory: boolean;
 }
 
 interface UserContextType {
@@ -62,7 +63,8 @@ const generatePermissionsByRole = (role: string): Permissions => {
     canCreateLoans: false,
     canUpdateLoans: false,
     canDeleteLoans: false,
-    canManageUsers: false
+    canManageUsers: false,
+    canViewLoanHistory: false
   };
   
   // Permisos para administradores (acceso completo)
@@ -76,7 +78,8 @@ const generatePermissionsByRole = (role: string): Permissions => {
       canCreateLoans: true,
       canUpdateLoans: true,
       canDeleteLoans: true,
-      canManageUsers: true
+      canManageUsers: true,
+      canViewLoanHistory: true
     };
   }
 
@@ -91,22 +94,8 @@ const generatePermissionsByRole = (role: string): Permissions => {
       canCreateLoans: true,
       canUpdateLoans: true,
       canDeleteLoans: true,
-      canManageUsers: true // Puede gestionar usuarios (dar de baja/reactivar)
-    };
-  }
-  
-  // Permisos para internos
-  if (roleLower === 'interno') {
-    return {
-      canAccessDashboard: false,
-      canAccessCatalogo: true,
-      canAccessPrestamos: false,
-      canAccessReportes: false,
-      canAccessUsuarios: false,
-      canCreateLoans: false,
-      canUpdateLoans: false,
-      canDeleteLoans: false,
-      canManageUsers: false
+      canManageUsers: true, // Puede gestionar usuarios (dar de baja/reactivar)
+      canViewLoanHistory: true
     };
   }
   
@@ -121,7 +110,24 @@ const generatePermissionsByRole = (role: string): Permissions => {
       canCreateLoans: false,
       canUpdateLoans: false,
       canDeleteLoans: false,
-      canManageUsers: false
+      canManageUsers: false,
+      canViewLoanHistory: false
+    };
+  }
+  
+  // Permisos para internos
+  if (roleLower === 'interno') {
+    return {
+      canAccessDashboard: true,
+      canAccessCatalogo: true,
+      canAccessPrestamos: true,
+      canAccessReportes: false,
+      canAccessUsuarios: false,
+      canCreateLoans: false,
+      canUpdateLoans: false,
+      canDeleteLoans: false,
+      canManageUsers: false,
+      canViewLoanHistory: false
     };
   }
   
@@ -248,11 +254,16 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         Estado: 'Activo'
       };
       
-      // Actualizar el usuario en el backend
-      await authService.updateUser(response.user.id, {
-        lastLogin: updatedUser.lastLogin,
-        Estado: 'Activo'
-      });
+      try {
+        // Intentar actualizar el usuario en el backend
+        await authService.updateUser(response.user.id, {
+          lastLogin: updatedUser.lastLogin,
+          Estado: 'Activo'
+        });
+      } catch (updateError) {
+        // Si falla la actualización, continuamos con el login
+        console.warn("No se pudo actualizar el último login, pero continuamos:", updateError);
+      }
       
       setUser(updatedUser);
       

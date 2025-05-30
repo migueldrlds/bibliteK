@@ -25,6 +25,12 @@
       "relation": "oneToMany",
       "target": "plugin::users-permissions.user",
       "mappedBy": "campus"
+    },
+    "entradas": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::entrada.entrada",
+      "mappedBy": "Campus"
     }
   }
 }

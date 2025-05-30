@@ -1,25 +1,36 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { User, GraduationCap, Calendar, MoreHorizontal, PlusCircle, DoorOpen, BadgeCheck, XCircle, Search, Eye, Hash, BarChart3 } from "lucide-react";
+import { User, GraduationCap, Calendar, MoreHorizontal, PlusCircle, DoorOpen, BadgeCheck, XCircle, Search, Eye, Hash, BarChart3, CheckCircle2, MapPin, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DashboardLayout } from "@/components/dashboard/layout";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { registrarEntrada, obtenerEntradas, obtenerHistorialPorUsuario } from "@/services/entradaService";
+import { useUser } from "@/context/user-context";
+import { obtenerCampus } from "@/services/campusService";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Datos de ejemplo para la tabla
 type Entrada = {
   id: number;
+  usuarioId?: number;
   numControl: string;
   nombre: string;
+  apellido?: string;
   carrera: string;
+  campusUsuario?: string;
+  campusEntrada?: string;
   fechaHora: string;
-  estado: 'registrada' | 'anulada';
+  estado: string;
+  bibliotecario?: string;
+  genero?: string;
+  rol?: string;
 };
 
 // Agrega un tipo extendido para la entrada con más datos
@@ -30,6 +41,8 @@ type EntradaDetallada = Entrada & {
     fechaHora: string;
     estado: string;
   }>;
+  rol?: string;
+  apellido?: string;
 };
 
 const mockEntradas: Entrada[] = [
@@ -43,6 +56,8 @@ const mockEntradas: Entrada[] = [
   }
 ];
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:1337/api";
+
 export default function EntradasPage() {
   const [entradas, setEntradas] = useState<Entrada[]>(mockEntradas);
   const [showDialog, setShowDialog] = useState(false);
@@ -50,17 +65,133 @@ export default function EntradasPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [detalleEntrada, setDetalleEntrada] = useState<EntradaDetallada | null>(null);
   const [tab, setTab] = useState("detalles");
+  const { user } = useUser();
+  const token = typeof window !== "undefined" ? localStorage.getItem("bibliotech-token") : null;
+  const [campusId, setCampusId] = useState("");
+  const [campusList, setCampusList] = useState<any[]>([]);
+  const [buscandoUsuario, setBuscandoUsuario] = useState(false);
+  const [usuarioEncontrado, setUsuarioEncontrado] = useState<any>(null);
+  const [buscarError, setBuscarError] = useState("");
+  const [registroExito, setRegistroExito] = useState("");
+  const [registroError, setRegistroError] = useState("");
+
+  // Cargar historial real de entradas
+  useEffect(() => {
+    if (!token) return;
+    obtenerEntradas({ token })
+      .then(data => {
+        setEntradas(data.map((item: any) => ({
+          id: item.id,
+          usuarioId: item.Usuario?.id,
+          numControl: item.Usuario?.Numcontrol || "",
+          nombre: item.Usuario?.username || "",
+          apellido: item.Usuario?.apellido || "",
+          carrera: item.Usuario?.carrera?.Nombre || "",
+          campusUsuario: item.Usuario?.campus?.Nombre || "",
+          campusEntrada: item.Campus?.Nombre || "",
+          fechaHora: new Date(item.Fecha).toLocaleString(),
+          estado: item.Usuario?.Estado || "-",
+          bibliotecario: item.Bibliotecario?.username || "",
+          genero: item.Usuario?.Genero || "-",
+          rol: item.Usuario?.rol || item.Usuario?.role?.name || "-"
+        })));
+      })
+      .catch(() => setEntradas([]));
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    obtenerCampus({ token }).then(setCampusList).catch(() => setCampusList([]));
+  }, [token, showDialog]);
+
+  // Buscar usuario por numControl
+  async function buscarUsuarioIdPorNumControl(numControl: string, token: string) {
+    const res = await fetch(`${API_BASE_URL}/users?filters[Numcontrol][$eq]=${numControl}`,
+      { headers: { "Authorization": `Bearer ${token}` } });
+    const data = await res.json();
+    if (data && data[0]) return data[0].id;
+    throw new Error("Usuario no encontrado");
+  }
+
+  // Función para buscar usuario por número de control y mostrar datos
+  const handleBuscarUsuario = async () => {
+    setBuscandoUsuario(true);
+    setBuscarError("");
+    setUsuarioEncontrado(null);
+    setRegistroExito("");
+    setRegistroError("");
+    try {
+      const usuarioId = await buscarUsuarioIdPorNumControl(numControl, token || "");
+      // Obtener datos completos del usuario
+      const res = await fetch(
+        `${API_BASE_URL}/users/${usuarioId}?fields[0]=username&fields[1]=Numcontrol&fields[2]=apellido&fields[3]=Estado&fields[4]=rol&populate[carrera][fields][0]=Nombre&populate[campus][fields][0]=Nombre&populate[role][fields][0]=name`,
+        {
+          headers: { "Authorization": `Bearer ${token}` }
+        }
+      );
+      const data = await res.json();
+      console.log("Usuario encontrado:", data);
+      setUsuarioEncontrado({
+        id: data.id,
+        numControl: data.Numcontrol,
+        nombre: data.username,
+        apellido: data.apellido,
+        carrera: data.carrera?.Nombre || "",
+        campus: data.campus?.Nombre || "",
+        rol: data.rol,
+        estado: data.Estado,
+        role: data.role
+      });
+    } catch (e) {
+      setBuscarError("No se encontró ningún usuario con ese número de control.");
+    } finally {
+      setBuscandoUsuario(false);
+    }
+  };
 
   // Handler para registrar nueva entrada (solo visual)
   const handleRegistrarEntrada = () => {
     setShowDialog(true);
   };
 
-  // Handler para confirmar registro (solo visual)
-  const handleConfirmarRegistro = () => {
-    // Aquí iría la lógica real
-    setShowDialog(false);
-    setNumControl("");
+  // Handler para confirmar registro (real)
+  const handleConfirmarRegistro = async () => {
+    setRegistroExito("");
+    setRegistroError("");
+    if (!numControl || !token || !user || !campusId || !usuarioEncontrado) return;
+    try {
+      await registrarEntrada({
+        tipo: "Consulta",
+        usuarioId: usuarioEncontrado.id,
+        bibliotecarioId: user.id,
+        campusId: Number(campusId),
+        token
+      });
+      // Recargar historial
+      const data = await obtenerEntradas({ token });
+      setEntradas(data.map((item: any) => ({
+        id: item.id,
+        usuarioId: item.Usuario?.id,
+        numControl: item.Usuario?.Numcontrol || "",
+        nombre: item.Usuario?.username || "",
+        apellido: item.Usuario?.apellido || "",
+        carrera: item.Usuario?.carrera?.Nombre || "",
+        campusUsuario: item.Usuario?.campus?.Nombre || "",
+        campusEntrada: item.Campus?.Nombre || "",
+        fechaHora: new Date(item.Fecha).toLocaleString(),
+        estado: item.Usuario?.Estado || "-",
+        bibliotecario: item.Bibliotecario?.username || "",
+        genero: item.Usuario?.Genero || "-",
+        rol: item.Usuario?.rol || item.Usuario?.role?.name || "-"
+      })));
+      setShowDialog(false);
+      setNumControl("");
+      setCampusId("");
+      setUsuarioEncontrado(null);
+      setRegistroExito("Entrada registrada exitosamente.");
+    } catch (e) {
+      setRegistroError("Ocurrió un error al registrar la entrada.");
+    }
   };
 
   // Filtrado de entradas según el término de búsqueda
@@ -74,17 +205,30 @@ export default function EntradasPage() {
   });
 
   // Handler para abrir modal de detalles
-  const handleVerDetalles = (entrada: Entrada) => {
+  const handleVerDetalles = async (entrada: Entrada) => {
     setDetalleEntrada({
       ...entrada,
-      genero: "Masculino",
-      bibliotecario: "Lic. Ana Torres",
-      historial: [
-        { fechaHora: "2024-06-10 08:30", estado: "Registrada" },
-        { fechaHora: "2024-06-09 09:10", estado: "Registrada" },
-      ],
+      genero: entrada.genero || "-",
+      bibliotecario: entrada.bibliotecario || "-",
+      historial: [],
     });
     setTab("detalles");
+
+    // Cargar historial real usando usuarioId
+    if (entrada.usuarioId && token) {
+      try {
+        const historial = await obtenerHistorialPorUsuario({ usuarioId: entrada.usuarioId, token });
+        setDetalleEntrada(detalle => detalle ? {
+          ...detalle,
+          historial: historial.map((item: any) => ({
+            fechaHora: new Date(item.Fecha).toLocaleString(),
+            estado: "Registrada"
+          }))
+        } : detalle);
+      } catch (e) {
+        // Maneja el error si lo deseas
+      }
+    }
   };
 
   return (
@@ -178,10 +322,12 @@ export default function EntradasPage() {
                               <Eye className="h-4 w-4 mr-2 text-muted-foreground" />
                               Ver detalles
                             </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              <XCircle className="h-4 w-4 mr-2 text-rose-500" />
-                              Anular entrada
-                            </DropdownMenuItem>
+                            {((typeof user?.role === 'string' && user.role === 'Administrador') || (typeof user?.role === 'object' && (user.role as any)?.name === 'Administrador')) && (
+                              <DropdownMenuItem>
+                                <XCircle className="h-4 w-4 mr-2 text-rose-500" />
+                                Anular entrada
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -193,25 +339,95 @@ export default function EntradasPage() {
           </div>
         </div>
         {/* Dialogo para registrar nueva entrada */}
-        <Dialog open={showDialog} onOpenChange={setShowDialog}>
+        <Dialog open={showDialog} onOpenChange={(open) => {
+          setShowDialog(open);
+          setUsuarioEncontrado(null);
+          setBuscarError("");
+          setRegistroExito("");
+          setRegistroError("");
+          setNumControl("");
+          setCampusId("");
+        }}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Registrar nueva entrada</DialogTitle>
             </DialogHeader>
-            <div className="py-4">
-              <Input
-                placeholder="Número de control del alumno"
-                value={numControl}
-                onChange={e => setNumControl(e.target.value)}
-                autoFocus
-              />
+            <div className="py-4 space-y-6">
+              {/* Paso 1: Buscar usuario */}
+              <div className="flex flex-col gap-2 bg-muted/60 rounded-md p-4 border">
+                <label className="text-sm font-medium mb-1">Número de control del alumno</label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Ejemplo: 20231234"
+                    value={numControl}
+                    onChange={e => setNumControl(e.target.value)}
+                    autoFocus
+                    disabled={buscandoUsuario}
+                    className="flex-1"
+                  />
+                  <Button onClick={handleBuscarUsuario} disabled={!numControl || buscandoUsuario} variant="secondary">
+                    {buscandoUsuario ? "Buscando..." : "Buscar"}
+                  </Button>
+                </div>
+                {buscarError && <div className="flex items-center gap-2 text-red-600 text-sm mt-1"><XCircle className="h-4 w-4" />{buscarError}</div>}
+              </div>
+              {/* Paso 2: Tarjeta de usuario encontrada */}
+              {usuarioEncontrado && (
+                <div className="border rounded-lg p-4 bg-white dark:bg-zinc-900 shadow-sm flex flex-col gap-2">
+                  <div className="flex items-center gap-3 mb-2">
+                    <User className="h-7 w-7 text-blue-600" />
+                    <span className="text-2xl font-bold leading-tight">
+                      {usuarioEncontrado.nombre} {usuarioEncontrado.apellido}
+                    </span>
+                    <span className="bg-blue-100 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded">
+                      {usuarioEncontrado.rol && usuarioEncontrado.rol !== "-" ? usuarioEncontrado.rol : (usuarioEncontrado.role?.name || "-")}
+                    </span>
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded ${usuarioEncontrado.estado === 'Activo' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                      {usuarioEncontrado.estado}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <Hash className="h-4 w-4 text-blue-500" />
+                      <span className="font-medium">Núm. Control:</span> {usuarioEncontrado.numControl}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <GraduationCap className="h-4 w-4 text-green-500" />
+                      <span className="font-medium">Carrera:</span> {usuarioEncontrado.carrera}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4 text-amber-500" />
+                      <span className="font-medium">Campus:</span> {usuarioEncontrado.campus}
+                    </div>
+                  </div>
+                </div>
+              )}
+              {/* Paso 3: Select de campus de entrada */}
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium mb-1 flex items-center gap-1"><MapPin className="h-4 w-4 text-amber-500" /> Campus de entrada</label>
+                <Select value={campusId} onValueChange={setCampusId} disabled={buscandoUsuario}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Selecciona el campus de entrada" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {campusList.map((campus) => (
+                      <SelectItem key={campus.id} value={campus.id.toString()}>
+                        {campus.attributes?.Nombre || campus.Nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {/* Paso 4: Mensajes de éxito/error */}
+              {registroExito && <div className="flex items-center gap-2 text-green-600 text-sm"><CheckCircle2 className="h-4 w-4" />{registroExito}</div>}
+              {registroError && <div className="flex items-center gap-2 text-red-600 text-sm"><AlertTriangle className="h-4 w-4" />{registroError}</div>}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowDialog(false)}>
                 Cancelar
               </Button>
-              <Button onClick={handleConfirmarRegistro} disabled={!numControl}>
-                Registrar
+              <Button onClick={handleConfirmarRegistro} disabled={!usuarioEncontrado || !campusId} size="lg" className="font-bold">
+                Registrar entrada
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -233,9 +449,13 @@ export default function EntradasPage() {
                   <div className="space-y-6">
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-3">
-                        <span className="text-2xl font-bold leading-tight">{detalleEntrada.nombre}</span>
-                        <span className="bg-blue-100 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded">Alumno</span>
-                        <span className="bg-green-100 text-green-700 text-xs font-semibold px-2 py-0.5 rounded">Activo</span>
+                        <span className="text-2xl font-bold leading-tight">{detalleEntrada.nombre} {detalleEntrada.apellido}</span>
+                        <span className="bg-blue-100 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded">
+                          {detalleEntrada.rol && detalleEntrada.rol !== "-" ? detalleEntrada.rol : "-"}
+                        </span>
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded ${detalleEntrada.estado === 'Activo' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                          {detalleEntrada.estado}
+                        </span>
                       </div>
                     </div>
                     <div className="border-b border-muted/30"></div>
@@ -249,12 +469,20 @@ export default function EntradasPage() {
                         <span className="flex items-center gap-1 font-medium text-sm"><Calendar className="h-3 w-3 text-amber-500" />{detalleEntrada.fechaHora}</span>
                       </div>
                       <div className="flex flex-col gap-1">
-                        <span className="text-xs text-muted-foreground">Género</span>
-                        <span className="flex items-center gap-1 font-medium text-sm"><User className="h-3 w-3 text-primary" />{detalleEntrada.genero}</span>
+                        <span className="text-xs text-muted-foreground">Rol</span>
+                        <span className="flex items-center gap-1 font-medium text-sm"><User className="h-3 w-3 text-primary" />{detalleEntrada.rol}</span>
                       </div>
                       <div className="flex flex-col gap-1">
                         <span className="text-xs text-muted-foreground">Carrera</span>
                         <span className="flex items-center gap-1 font-medium text-sm"><GraduationCap className="h-3 w-3 text-green-500" />{detalleEntrada.carrera}</span>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">Campus Usuario</span>
+                        <span className="flex items-center gap-1 font-medium text-sm"><User className="h-3 w-3 text-primary" />{detalleEntrada.campusUsuario}</span>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">Campus Entrada</span>
+                        <span className="flex items-center gap-1 font-medium text-sm"><User className="h-3 w-3 text-primary" />{detalleEntrada.campusEntrada}</span>
                       </div>
                       <div className="flex flex-col gap-1 sm:col-span-2">
                         <span className="text-xs text-muted-foreground">Bibliotecario que registró</span>

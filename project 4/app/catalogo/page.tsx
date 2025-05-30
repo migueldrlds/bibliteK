@@ -210,7 +210,7 @@ type BookWithInventories = typeof books[0] & {
 
 function CatalogoContent() {
   // Todos los hooks primero
-  const { permissions, isAuthenticated, loading, isAdmin } = useUser();
+  const { permissions, isAuthenticated, loading, isAdmin, user } = useUser();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [selectedBook, setSelectedBook] = useState<BookWithInventories | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -811,6 +811,9 @@ function CatalogoContent() {
     );
   };
 
+  // Determinar si el usuario es alumno o interno
+  const isAlumnoOInterno = user && (user.role?.toLowerCase() === 'alumno' || user.role?.toLowerCase() === 'interno');
+
   // Definir la función fetchBooks aquí, antes de usarla en useEffect
   const fetchBooks = async (forceRefresh = false) => {
     try {
@@ -1374,7 +1377,7 @@ function CatalogoContent() {
                 <TabsList className="w-full grid grid-cols-3">
                   <TabsTrigger value="details">Detalles</TabsTrigger>
                   <TabsTrigger value="location">Ubicación</TabsTrigger>
-                  <TabsTrigger value="history">Historial</TabsTrigger>
+                  <TabsTrigger value="history">{isAlumnoOInterno ? 'Disponibilidad' : 'Historial'}</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="details" className="space-y-6">
@@ -1456,7 +1459,46 @@ function CatalogoContent() {
                 </TabsContent>
 
                 <TabsContent value="history" className="space-y-4">
-                  {isLoadingLoans ? (
+                  {!permissions?.canViewLoanHistory ? (
+                    <div className="text-center py-6">
+                      <div className="flex flex-col items-center gap-4">
+                        <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                          <CalendarDays className="h-6 w-6 text-primary" />
+                        </div>
+                        <div className="space-y-2">
+                          <p className="font-medium">Disponibilidad del libro</p>
+                          {loanHistory.length > 0 ? (
+                            <div className="text-sm text-muted-foreground">
+                              {(() => {
+                                // Encontrar el préstamo activo más reciente
+                                const activeLoan = loanHistory
+                                  .filter(loan => loan.estado === 'activo' || loan.estado === 'renovado')
+                                  .sort((a, b) => new Date(b.fecha_prestamo).getTime() - new Date(a.fecha_prestamo).getTime())[0];
+
+                                if (activeLoan) {
+                                  const returnDate = new Date(activeLoan.fecha_devolucion_esperada);
+                                  const today = new Date();
+                                  const diffTime = returnDate.getTime() - today.getTime();
+                                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                  
+                                  if (diffDays <= 0) {
+                                    return "Este libro estará disponible pronto";
+                                  } else {
+                                    return `Este libro estará disponible en ${diffDays} ${diffDays === 1 ? 'día' : 'días'}`;
+                                  }
+                                }
+                                return "Este libro está disponible actualmente";
+                              })()}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">
+                              Este libro está disponible actualmente
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : isLoadingLoans ? (
                     <div className="text-center py-6">
                       <div className="flex flex-col items-center">
                         <User className="h-10 w-10 text-muted-foreground/50 animate-pulse" />

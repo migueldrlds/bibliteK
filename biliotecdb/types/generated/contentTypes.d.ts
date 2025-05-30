@@ -422,6 +422,7 @@ export interface ApiCampusCampus extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    entradas: Schema.Attribute.Relation<'oneToMany', 'api::entrada.entrada'>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -512,6 +513,7 @@ export interface ApiConsultaConsulta extends Struct.CollectionTypeSchema {
 export interface ApiEntradaEntrada extends Struct.CollectionTypeSchema {
   collectionName: 'entradas';
   info: {
+    description: '';
     displayName: 'Entrada';
     pluralName: 'entradas';
     singularName: 'entrada';
@@ -524,6 +526,7 @@ export interface ApiEntradaEntrada extends Struct.CollectionTypeSchema {
       'manyToOne',
       'plugin::users-permissions.user'
     >;
+    Campus: Schema.Attribute.Relation<'manyToOne', 'api::campus.campus'>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
