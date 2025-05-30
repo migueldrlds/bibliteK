@@ -235,6 +235,37 @@ const getCampusBadge = (campus: string | undefined) => {
   );
 };
 
+// Interfaz para representar los datos de usuario (ajustada a la respuesta real de la API)
+interface User {
+  id: number;
+  username: string;
+  email: string;
+  provider?: string;
+  confirmed?: boolean;
+  blocked?: boolean;
+  role?: string;
+  createdAt: string;
+  updatedAt: string;
+  Numcontrol?: string;
+  numcontrol?: string; // Puede que venga en minúsculas también
+  Carrera?: string; // Mantener por si acaso, pero la API devuelve anidado
+  Genero?: string;
+  campus?: string | number | null;
+  documentId?: string;
+  Estado?: string;
+  rol?: string;
+  // Añadir la estructura anidada real de la carrera
+  carrera?: { 
+    id?: number; // ID de la carrera si se popula
+    Nombre: string; // El nombre de la carrera
+    // Puedes añadir más propiedades aquí si son relevantes
+    // createdAt?: string;
+    // updatedAt?: string;
+    // publishedAt?: string;
+  };
+  apellido?: string;
+}
+
 // Interfaz para adaptar los datos de la API al formato esperado por la interfaz
 interface UILoan {
   id: string | number;
@@ -242,10 +273,12 @@ interface UILoan {
   formattedId?: string;
   book: Book; // Cambiar de string a Book
   bookId: string | number;
-  user: string;
+  user: string; // Esto es el username
+  userApellido?: string; // Añadir campo para el apellido
   userId?: string;
   userNumControl?: string;
-  userCarrera?: string;
+  // Ajustar para que userCarrera sea el string del nombre de la carrera
+  userCarrera?: string; 
   loanDate: string;
   returnDate: string;
   status: string;
@@ -660,10 +693,11 @@ function PrestamosContent(): JSX.Element | null {
             formattedId: `LOAN-${new Date().getFullYear()}-${String(loan.id).padStart(3, '0')}`,
             book: loan.book,
             bookId: loan.book.id_libro,
-            user: loan.usuario?.username || 'Sin usuario',
+            user: loan.usuario?.username || 'Sin usuario', // Username
+            userApellido: loan.usuario?.apellido || '', // Apellido
             userId: loan.usuario?.id?.toString(),
             userNumControl: loan.usuario?.Numcontrol || '',
-            userCarrera: loan.usuario?.Carrera,
+            userCarrera: loan.usuario?.carrera?.Nombre || '', // Extraer carrera de la propiedad anidada
             loanDate: loan.fecha_prestamo,
             returnDate: loan.fecha_devolucion_esperada,
             status: status,
@@ -753,7 +787,139 @@ function PrestamosContent(): JSX.Element | null {
 
   // DESPUÉS de todos los hooks y useEffects, verificar y retornar condicionalmente
 
-  // Mostrar loading mientras se cargan los permisos o redirigir si no tiene permisos
+  // Función para calcular multas en lote (debe ir antes del useEffect que la usa)
+  const calculateAllFines = async () => {
+      setIsUpdatingFines(true);
+    try {
+      // Obtener solo los préstamos atrasados
+      const overdueLoans = loans.filter(loan => loan.status === "atrasado");
+      if (overdueLoans.length === 0) {
+        toast({
+          description: "No hay préstamos atrasados para actualizar multas",
+        });
+        setIsUpdatingFines(false);
+        return 0;
+      }
+      
+      let updatedCount = 0;
+      let totalHolidaysApplied = 0;
+      const updatedLoans = [...loans];
+      
+      for (const loan of overdueLoans) {
+        try {
+          // Usar los días feriados específicos de este préstamo
+          const loanHolidayDays = holidayDaysByLoan[loan.id] || 0;
+          totalHolidaysApplied += loanHolidayDays;
+          
+          // Verificar la multa original para saber si hay cambios
+          const originalFine = loan.multa || 0;
+          const originalDaysLate = loan.dias_atraso || 0;
+          
+          // Llamar al backend para sincronizar las multas
+          const { multa, dias_atraso } = await loanService.syncFineWithBackend(
+            loan.id, 
+            loan.documentId,
+            loanHolidayDays
+          );
+          
+          // Verificar si hubo cambios
+          const hasChanged = multa !== originalFine || dias_atraso !== originalDaysLate;
+          
+          // Actualizar el préstamo en el array local
+          const loanIndex = updatedLoans.findIndex(l => l.id === loan.id);
+          if (loanIndex >= 0) {
+            updatedLoans[loanIndex] = {
+              ...updatedLoans[loanIndex],
+              multa,
+              dias_atraso
+            };
+            
+            // Solo incrementar el contador si hubo cambios reales
+            if (hasChanged) {
+          updatedCount++;
+            }
+          }
+        } catch (error) {
+          console.error(`Error al actualizar multa para préstamo ${loan.id}:`, error);
+        }
+      }
+      
+      setLoans(updatedLoans);
+      
+      // Solo mostrar notificación si hubo cambios reales
+      if (updatedCount > 0) {
+      toast({
+          description: `Multas actualizadas para ${updatedCount} préstamos${totalHolidaysApplied > 0 ? ` (${totalHolidaysApplied} días feriados descontados)` : ''}`,
+      });
+      }
+      
+      return updatedCount;
+    } catch (error) {
+      console.error("Error al actualizar multas:", error);
+      toast({
+        variant: "destructive",
+        description: "Error al actualizar multas",
+      });
+      return 0;
+    } finally {
+      setIsUpdatingFines(false);
+    }
+  };
+
+  // Nuevo useEffect: recalcular multas automáticamente cuando cambian los días feriados
+  useEffect(() => {
+    if (holidays.length > 0) {
+      calculateAllFines();
+    }
+  }, [holidays]);
+
+  // Nuevo useEffect: recalcular y sincronizar multas automáticamente cuando cambian los días feriados
+  useEffect(() => {
+    const syncFinesWithBackend = async () => {
+      if (holidays.length > 0 && loans.length > 0) {
+        const feriados = holidays.map(h => h.date);
+        const atrasados = loans.filter(loan => loan.status === "atrasado");
+        for (const loan of atrasados) {
+          const diasAtraso = loanService.calculateBusinessDaysWithHolidays(
+            new Date(loan.returnDate),
+            new Date(),
+            feriados
+          );
+          const multa = diasAtraso * 10;
+          // Solo actualiza si hay diferencia
+          if (loan.multa !== multa || loan.dias_atraso !== diasAtraso) {
+            try {
+              const idToUse = loan.documentId || loan.id;
+              console.log('Actualizando préstamo:', idToUse);
+              await loanService.updateLoan(idToUse, {
+                multa,
+                dias_atraso: diasAtraso
+              });
+            } catch (error: any) {
+              if (error.message && error.message.includes('404')) {
+                toast({
+                  variant: 'destructive',
+                  title: 'Préstamo no encontrado',
+                  description: `No se pudo actualizar el préstamo con ID/documentId: ${loan.documentId || loan.id}`
+                });
+                continue; // Continúa con el siguiente préstamo
+              } else {
+                toast({
+                  variant: 'destructive',
+                  title: 'Error al actualizar multa',
+                  description: error.message || 'Error desconocido'
+                });
+              }
+            }
+          }
+        }
+      }
+    };
+    syncFinesWithBackend();
+  }, [holidays, loans]);
+
+  // AHORA los returns condicionales
+  // (Asegúrate de que todos los hooks estén antes de estos returns)
   if (!permissions) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
@@ -765,7 +931,6 @@ function PrestamosContent(): JSX.Element | null {
     );
   }
 
-  // Redirigir si no tiene permisos
   if (!permissions.canAccessPrestamos) {
     return null; // El useEffect ya maneja la redirección
   }
@@ -928,9 +1093,10 @@ function PrestamosContent(): JSX.Element | null {
           book: loan.book,
           bookId: loan.book.id_libro,
           user: loan.usuario?.username || 'Sin usuario',
+          userApellido: loan.usuario?.apellido || '',
           userId: loan.usuario?.id?.toString(),
           userNumControl: loan.usuario?.Numcontrol || '',
-          userCarrera: loan.usuario?.Carrera,
+          userCarrera: loan.usuario?.Carrera || '', // Extraer carrera usando la propiedad directa 'Carrera'
           loanDate: loan.fecha_prestamo,
           returnDate: loan.fecha_devolucion_esperada,
           status: loan.estado,
@@ -980,11 +1146,31 @@ function PrestamosContent(): JSX.Element | null {
       // Sort by date
       if (sortOrder === "recientes") {
           return new Date(b.loanDate).getTime() - new Date(a.loanDate).getTime();
-      } else {
+      } else if (sortOrder === "antiguos") {
           return new Date(a.loanDate).getTime() - new Date(b.loanDate).getTime();
+      } else if (sortOrder === "vencimiento") {
+        // Sort by return date (earliest first)
+        return new Date(a.returnDate).getTime() - new Date(b.returnDate).getTime();
+      } else if (sortOrder === "usuario") {
+        // Sort by username alphabetically
+        const nameA = normalizeString(a.user);
+        const nameB = normalizeString(b.user);
+        if (nameA < nameB) return -1;
+        if (nameA > nameB) return 1;
+        return 0;
+      } else if (sortOrder === "libro") {
+        // Sort by book title alphabetically
+        const titleA = normalizeString(a.book.titulo);
+        const titleB = normalizeString(b.book.titulo);
+        if (titleA < titleB) return -1;
+        if (titleA > titleB) return 1;
+        return 0;
       }
+      // Default to sorting by recent date if sortOrder is unknown
+      return new Date(b.loanDate).getTime() - new Date(a.loanDate).getTime();
     });
 
+  // Función para formatear fecha
   const formatDate = (date: string, includeTime: boolean = false): FormattedDate => {
     if (!date) return { date: "N/A" };
     
@@ -1018,7 +1204,7 @@ function PrestamosContent(): JSX.Element | null {
       }
     } catch (e) {
       console.error("Error formatting date:", e);
-      return { date };
+      return { date }; // Ensure a return in catch block
     }
   };
 
@@ -1461,85 +1647,6 @@ function PrestamosContent(): JSX.Element | null {
     );
   };
 
-  // Función para calcular multas en lote
-  const calculateAllFines = async () => {
-      setIsUpdatingFines(true);
-    try {
-      // Obtener solo los préstamos atrasados
-      const overdueLoans = loans.filter(loan => loan.status === "atrasado");
-      if (overdueLoans.length === 0) {
-        toast({
-          description: "No hay préstamos atrasados para actualizar multas",
-        });
-        setIsUpdatingFines(false);
-        return 0;
-      }
-      
-      let updatedCount = 0;
-      let totalHolidaysApplied = 0;
-      const updatedLoans = [...loans];
-      
-      for (const loan of overdueLoans) {
-        try {
-          // Usar los días feriados específicos de este préstamo
-          const loanHolidayDays = holidayDaysByLoan[loan.id] || 0;
-          totalHolidaysApplied += loanHolidayDays;
-          
-          // Verificar la multa original para saber si hay cambios
-          const originalFine = loan.multa || 0;
-          const originalDaysLate = loan.dias_atraso || 0;
-          
-          // Llamar al backend para sincronizar las multas
-          const { multa, dias_atraso } = await loanService.syncFineWithBackend(
-            loan.id, 
-            loan.documentId,
-            loanHolidayDays
-          );
-          
-          // Verificar si hubo cambios
-          const hasChanged = multa !== originalFine || dias_atraso !== originalDaysLate;
-          
-          // Actualizar el préstamo en el array local
-          const loanIndex = updatedLoans.findIndex(l => l.id === loan.id);
-          if (loanIndex >= 0) {
-            updatedLoans[loanIndex] = {
-              ...updatedLoans[loanIndex],
-              multa,
-              dias_atraso
-            };
-            
-            // Solo incrementar el contador si hubo cambios reales
-            if (hasChanged) {
-          updatedCount++;
-            }
-          }
-        } catch (error) {
-          console.error(`Error al actualizar multa para préstamo ${loan.id}:`, error);
-        }
-      }
-      
-      setLoans(updatedLoans);
-      
-      // Solo mostrar notificación si hubo cambios reales
-      if (updatedCount > 0) {
-      toast({
-          description: `Multas actualizadas para ${updatedCount} préstamos${totalHolidaysApplied > 0 ? ` (${totalHolidaysApplied} días feriados descontados)` : ''}`,
-      });
-      }
-      
-      return updatedCount;
-    } catch (error) {
-      console.error("Error al actualizar multas:", error);
-      toast({
-        variant: "destructive",
-        description: "Error al actualizar multas",
-      });
-      return 0;
-    } finally {
-      setIsUpdatingFines(false);
-    }
-  };
-
   // Función para recargar los libros con inventario actualizado
   const recargarLibrosConInventario = async () => {
     try {
@@ -1566,7 +1673,7 @@ function PrestamosContent(): JSX.Element | null {
       const dateString = date.toISOString().split('T')[0];
       
       // Marcar esta fecha específica como en proceso de carga
-      setLoadingDates(prev => ({...prev, [dateString]: true}));
+      setLoadingDates((prev: {[key: string]: boolean}) => ({...prev, [dateString]: true}));
       
       // Actualización optimista (mostrar como feriado antes de confirmación)
       const tempHoliday = {
@@ -1655,7 +1762,7 @@ function PrestamosContent(): JSX.Element | null {
     } finally {
       // Limpiar estado de carga para esta fecha
       const dateString = date.toISOString().split('T')[0];
-      setLoadingDates(prev => {
+      setLoadingDates((prev: {[key: string]: boolean}) => {
         const updated = {...prev};
         delete updated[dateString];
         return updated;
@@ -1672,11 +1779,11 @@ function PrestamosContent(): JSX.Element | null {
       const dateString = new Date(holiday.date).toISOString().split('T')[0];
       
       // Marcar esta fecha específica como en proceso de carga
-      setLoadingDates(prev => ({...prev, [dateString]: true}));
+      setLoadingDates((prev: {[key: string]: boolean}) => ({...prev, [dateString]: true}));
       
       // Actualización optimista (quitar de la lista local inmediatamente)
       const originalHolidays = [...holidays];
-      setHolidays(prev => prev.filter(h => h.id !== holiday.id));
+      setHolidays((prev: Holiday[]) => prev.filter(h => h.id !== holiday.id));
       
       console.log('Intentando eliminar feriado:', holiday);
       
@@ -1822,7 +1929,7 @@ function PrestamosContent(): JSX.Element | null {
     } finally {
       // Limpiar estado de carga para esta fecha
       const dateString = new Date(holiday.date).toISOString().split('T')[0];
-      setLoadingDates(prev => {
+      setLoadingDates((prev: {[key: string]: boolean}) => {
         const updated = {...prev};
         delete updated[dateString];
         return updated;
@@ -1922,6 +2029,43 @@ function PrestamosContent(): JSX.Element | null {
           </div>
           )}
         </time>
+      </div>
+    );
+  };
+
+  // Función para mostrar la información de multa correctamente descontando feriados
+  const renderFineInfo = (loan: UILoan) => {
+    // Obtener la lista de feriados en formato string ISO
+    const feriados = holidays.map(h => h.date);
+    // Calcular días de atraso descontando feriados
+    const diasAtraso = loanService.calculateBusinessDaysWithHolidays(
+      new Date(loan.returnDate),
+      new Date(),
+      feriados
+    );
+    const multa = diasAtraso * 10;
+    return (
+      <div className="border rounded-md p-3 bg-rose-50 dark:bg-rose-900/10 mt-3">
+        <div className="flex items-center mb-2">
+          <h4 className="text-sm font-medium text-rose-600 dark:text-rose-400">
+            Información de multa
+          </h4>
+        </div>
+        <div className="grid grid-cols-2 gap-2 text-sm">
+          <div>
+            <p className="text-xs font-medium text-rose-600 dark:text-rose-400">Días de atraso:</p>
+            <p className="text-sm">{diasAtraso} días hábiles</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-rose-600 dark:text-rose-400">Monto:</p>
+            <p className="text-sm">${multa} MXN</p>
+          </div>
+        </div>
+        {diasAtraso > 0 && (
+          <p className="text-xs text-muted-foreground mt-2">
+            La multa se incrementará hasta la devolución del libro
+          </p>
+        )}
       </div>
     );
   };
@@ -2107,7 +2251,7 @@ function PrestamosContent(): JSX.Element | null {
                                 <User className="h-4 w-4" />
                               </div>
                               <div className="space-y-1">
-                                <p className="text-sm font-medium leading-none">{loan.user}</p>
+                                <p className="text-sm font-medium leading-none">{loan.user} {loan.userApellido}</p>
                             <p className="text-xs text-muted-foreground">{loan.userNumControl}</p>
                             {loan.userCarrera && (
                                   <div className="flex items-center gap-1 mt-0.5">
@@ -2167,13 +2311,22 @@ function PrestamosContent(): JSX.Element | null {
                               </div>
                               
                               {/* Mostrar multa usando datos del backend o calculados */}
-                              {loan.status === "atrasado" && loan.multa && loan.multa > 0 && (
-                                <div className="mt-1">
-                                  <Badge variant="destructive" className="bg-rose-500 py-0 px-1.5 text-[10px]">
-                                    ${loan.multa} ({loan.dias_atraso || 0} días)
-                                  </Badge>
-                                </div>
-                              )}
+                              {(loan.status === "atrasado" || (loan.status === "devuelto" && loan.multa && loan.multa > 0)) && (() => {
+                                const feriados = holidays.map(h => h.date);
+                                const diasAtraso = loanService.calculateBusinessDaysWithHolidays(
+                                  new Date(loan.returnDate),
+                                  new Date(),
+                                  feriados
+                                );
+                                const multa = diasAtraso * 10;
+                                return (
+                                  <div className="mt-1">
+                                    <Badge variant="destructive" className="bg-rose-500 py-0 px-1.5 text-[10px]">
+                                      ${multa} ({diasAtraso} días)
+                                    </Badge>
+                                  </div>
+                                );
+                              })()}
                               {loan.status === "devuelto" && loan.multa && loan.multa > 0 && (
                                 <div className="mt-1">
                                   <Badge variant="destructive" className="bg-rose-500 py-0 px-1.5 text-[10px]">
@@ -2315,7 +2468,7 @@ function PrestamosContent(): JSX.Element | null {
               <p className="text-muted-foreground text-xs mb-1 flex items-center gap-1">
                 <User className="h-3 w-3" /> <span className="font-bold">Usuario</span>
               </p>
-              <p className="font-medium">{selectedLoan.user}</p>
+              <p className="font-medium">{selectedLoan.user} {selectedLoan.userApellido}</p>
               <div className="flex items-center gap-1 mt-1">
                 <GraduationCap className="h-3 w-3 text-muted-foreground" />
                 <p className="text-xs">{selectedLoan.userCarrera || "Sin carrera"}</p>
@@ -2373,36 +2526,8 @@ function PrestamosContent(): JSX.Element | null {
 
           {/* Información de multa */}
                 {(selectedLoan.status === "atrasado" || (selectedLoan.status === "devuelto" && selectedLoan.multa && selectedLoan.multa > 0)) && (
-            <div className="border rounded-md p-3 bg-rose-50 dark:bg-rose-900/10 mt-3">
-              <div className="flex items-center mb-2">
-                <h4 className="text-sm font-medium text-rose-600 dark:text-rose-400">
-                      Información de multa
-                    </h4>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div>
-                  <p className="text-xs font-medium text-rose-600 dark:text-rose-400">Días de atraso:</p>
-                  <p className="text-sm">{selectedLoan.dias_atraso || 0} días hábiles</p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-rose-600 dark:text-rose-400">Monto:</p>
-                  <p className="text-sm">${selectedLoan.multa || 0} MXN</p>
-                </div>
-              </div>
-              {holidayDaysByLoan[selectedLoan.id] > 0 && (
-                <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1">
-                  <CheckCircle2 className="h-3 w-3" />
-                  {holidayDaysByLoan[selectedLoan.id]} {holidayDaysByLoan[selectedLoan.id] === 1 ? 'día feriado descontado' : 'días feriados descontados'} del cálculo
-                </p>
-              )}
-              <p className="text-xs text-muted-foreground mt-2">
-                {selectedLoan.status === "atrasado" 
-                  ? "La multa se incrementará hasta la devolución del libro" 
-                  : "Multa aplicada en la devolución"}
-              </p>
-                  </div>
-                )}
+            renderFineInfo(selectedLoan)
+          )}
             </div>
         <DialogFooter className="flex flex-col gap-2 items-stretch border-t pt-3">
           {selectedLoan.status === "renovado" && (
@@ -2718,7 +2843,8 @@ function PrestamosContent(): JSX.Element | null {
                           <div className="flex items-start gap-2">
                             <User className="h-4 w-4 text-primary mt-0.5" />
                             <div>
-                              <div className="font-medium text-sm">{user.username}</div>
+                              {/* Mostrar nombre y apellido en la lista */}
+                              <div className="font-medium text-sm">{user.username} {user.apellido}</div>
                               <div className="text-xs text-muted-foreground">{user.email}</div>
                               {user.Numcontrol && (
                                 <div className="flex items-center gap-1 mt-1 text-xs">
@@ -2746,7 +2872,8 @@ function PrestamosContent(): JSX.Element | null {
                       <CheckCircle2 className="h-4 w-4 text-primary" />
                       <div className="text-sm font-medium">Usuario seleccionado</div>
                     </div>
-                    <div className="mt-1 text-sm font-semibold">{selectedNewLoanUser.username}</div>
+                    {/* Mostrar nombre y apellido */}
+                    <div className="mt-1 text-sm font-semibold">{selectedNewLoanUser.username} {selectedNewLoanUser.apellido}</div>
                     {selectedNewLoanUser.Numcontrol && (
                       <div className="flex items-center gap-1 mt-1 text-xs">
                         <span className="text-muted-foreground">Matrícula:</span>
@@ -2966,7 +3093,7 @@ function PrestamosContent(): JSX.Element | null {
                   <div className="flex items-start gap-2">
                     <User className="h-5 w-5 text-slate-500 mt-0.5" />
                     <div>
-                      <h4 className="font-medium text-sm">{selectedLoan.user}</h4>
+                      <h4 className="font-medium text-sm">{selectedLoan.user} {selectedLoan.userApellido}</h4>
                       <div className="flex items-center gap-1 mt-1">
                         <GraduationCap className="h-3 w-3 text-muted-foreground" />
                         <span className="text-xs text-muted-foreground">{selectedLoan.userCarrera || "Sin carrera"}</span>

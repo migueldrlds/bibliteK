@@ -653,7 +653,6 @@ export const bookService = {
       if (inventoriesResponse && inventoriesResponse.data && Array.isArray(inventoriesResponse.data)) {
         const inventories = inventoriesResponse.data;
         console.log(`Se encontraron ${inventories.length} inventarios para campus ${campus} y libro ${book.titulo}`);
-        
         // Log detallado de cada inventario
         inventories.forEach((inv, index) => {
           console.log(`\nInventario #${index + 1}:`);
@@ -662,14 +661,12 @@ export const bookService = {
           console.log("Campus:", inv.Campus);
           console.log("Cantidad:", inv.Cantidad);
         });
-        
         // Si hay inventarios existentes, actualizar el primero
         if (inventories.length > 0) {
           const inventoryToUpdate = inventories[0];
           const inventoryDocId = inventoryToUpdate.documentId || inventoryToUpdate.id;
           const currentQuantity = inventoryToUpdate.Cantidad || 0;
           const newQuantity = Math.max(0, currentQuantity + quantityChange);
-          
           console.log(`Actualizando inventario existente (ID: ${inventoryDocId}) de cantidad ${currentQuantity} a ${newQuantity}`);
           try {
             const updateResponse = await fetchAPI(`/api/inventories/${inventoryDocId}`, {
@@ -681,7 +678,6 @@ export const bookService = {
                 }
               }),
             });
-            
             console.log("Inventario actualizado con éxito:", updateResponse);
             console.log("=== FIN DE ACTUALIZACIÓN DE INVENTARIO ===");
             return updateResponse;
@@ -689,6 +685,10 @@ export const bookService = {
             console.error(`Error al actualizar inventario con ID ${inventoryDocId}:`, updateError);
             throw new Error(`Error al actualizar inventario: ${updateError instanceof Error ? updateError.message : String(updateError)}`);
           }
+        } else {
+          // NO crear inventario nuevo al prestar un libro
+          console.error(`No existe inventario para el libro ${book.titulo} (documentId: ${book.documentId}) en el campus ${campus}. No se puede prestar el libro.`);
+          throw new Error(`No existe inventario para el libro ${book.titulo} (documentId: ${book.documentId}) en el campus ${campus}. No se puede prestar el libro.`);
         }
       }
       

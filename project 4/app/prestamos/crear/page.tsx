@@ -51,6 +51,17 @@ interface User {
   email: string;
   Numcontrol?: string;
   Carrera?: string;
+  apellido?: string;
+}
+
+interface LoanData {
+  book: number;
+  usuario: number;
+  fecha_prestamo: string;
+  fecha_devolucion_esperada: string;
+  estado: "activo";
+  notas: string;
+  campus_origen: string;
 }
 
 export default function CrearPrestamoPage() {
@@ -169,7 +180,7 @@ export default function CrearPrestamoPage() {
       setIsLoading(true);
       
       // Preparar datos para el servicio
-      const loanData = {
+      const loanData: LoanData = {
         book: selectedBook.id,
         usuario: selectedUser.id,
         fecha_prestamo: loanDate.toISOString(),

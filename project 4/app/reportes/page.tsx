@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { DashboardLayout } from "@/components/dashboard/layout";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardContent,
@@ -67,6 +68,8 @@ import {
   ChevronRight,
   Book,
   BookText,
+  Settings2,
+  FileDown,
 } from "lucide-react";
 import {
   AreaChart,
@@ -280,120 +283,254 @@ async function fetchAllConsultas(): Promise<any[]> {
   return todas;
 }
 
-// Función para descargar las consultas como CSV
-async function descargarConsultasCSV(dateRange?: DateRange) {
+// Definir las columnas disponibles
+const columnasDisponibles = [
+  { id: "id", label: "ID", defaultSelected: true },
+  { id: "documentId", label: "DocumentID", defaultSelected: true },
+  { id: "fecha", label: "Fecha", defaultSelected: true },
+  { id: "ip", label: "IP", defaultSelected: true },
+  { id: "user_agent", label: "User Agent", defaultSelected: true },
+  { id: "createdAt", label: "Creado", defaultSelected: true },
+  { id: "updatedAt", label: "Actualizado", defaultSelected: true },
+  { id: "publishedAt", label: "Publicado", defaultSelected: true },
+  { id: "book_id", label: "Libro ID", defaultSelected: true },
+  { id: "book_id_libro", label: "ID_Libro", defaultSelected: true },
+  { id: "book_titulo", label: "Título", defaultSelected: true },
+  { id: "book_autor", label: "Autor", defaultSelected: true },
+  { id: "book_clasificacion", label: "Clasificación", defaultSelected: true },
+  { id: "user_id", label: "Usuario ID", defaultSelected: true },
+  { id: "user_username", label: "Nombre", defaultSelected: true },
+  { id: "user_apellido", label: "Apellido", defaultSelected: true },
+  { id: "user_email", label: "Email", defaultSelected: true },
+  { id: "user_numcontrol", label: "Num Control", defaultSelected: true },
+  { id: "user_genero", label: "Género", defaultSelected: true },
+  { id: "user_carrera", label: "Carrera", defaultSelected: true },
+  { id: "user_campus", label: "Campus", defaultSelected: true },
+  { id: "user_estado", label: "Estado", defaultSelected: true },
+  { id: "user_rol", label: "Rol", defaultSelected: true },
+];
+
+// Componente para selección de columnas
+function ColumnSelector({ 
+  selectedColumns, 
+  onColumnsChange 
+}: { 
+  selectedColumns: string[], 
+  onColumnsChange: (columns: string[]) => void 
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const handleToggleColumn = (columnId: string) => {
+    const newColumns = selectedColumns.includes(columnId)
+      ? selectedColumns.filter(id => id !== columnId)
+      : [...selectedColumns, columnId];
+    onColumnsChange(newColumns);
+  };
+
+  const handleSelectAll = () => {
+    onColumnsChange(columnasDisponibles.map(col => col.id));
+  };
+
+  const handleDeselectAll = () => {
+    onColumnsChange([]);
+  };
+
+  return (
+    <div className="relative">
+      <Button
+        variant="outline"
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-2"
+      >
+        <Settings2 className="h-4 w-4" />
+        Seleccionar Columnas
+      </Button>
+
+      {isOpen && (
+        <div className="absolute z-50 mt-2 w-72 rounded-md border bg-background p-4 shadow-lg">
+          <div className="mb-4 flex justify-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleSelectAll}>
+              Seleccionar Todo
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleDeselectAll}>
+              Deseleccionar Todo
+            </Button>
+          </div>
+          <div className="max-h-60 space-y-2 overflow-y-auto">
+            {columnasDisponibles.map((column) => (
+              <label
+                key={column.id}
+                className="flex items-center space-x-2"
+              >
+                <Checkbox
+                  checked={selectedColumns.includes(column.id)}
+                  onCheckedChange={() => handleToggleColumn(column.id)}
+                />
+                <span>{column.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Modificar las funciones de exportación
+async function descargarConsultasCSV(dateRange?: DateRange, selectedColumns: string[] = columnasDisponibles.map(col => col.id)) {
   try {
-    console.log("Iniciando descarga de CSV usando api.ts...");
-    // Usar la función que trae todas las páginas
-    const consultas = await fetchAllConsultas();
+    console.log("Iniciando descarga de CSV...");
+    
+    // Obtener las consultas actuales del estado
+    const consultasActuales = await fetchAllConsultas();
+    
     // Filtrar por rango de fechas seleccionado
-    const filteredConsultas = consultas.filter((consulta: any) => {
+    const filteredConsultas = consultasActuales.filter((consulta: any) => {
       if (!dateRange?.from && !dateRange?.to) return true;
       const fecha = new Date(consulta.fecha || consulta.createdAt);
-      if (dateRange?.from && fecha < dateRange.from) return false;
-      if (dateRange?.to && fecha > dateRange.to) return false;
+      const fechaLocal = new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
+      const fromLocal = dateRange?.from ? new Date(dateRange.from.getFullYear(), dateRange.from.getMonth(), dateRange.from.getDate()) : null;
+      const toLocal = dateRange?.to ? new Date(dateRange.to.getFullYear(), dateRange.to.getMonth(), dateRange.to.getDate()) : null;
+      
+      if (fromLocal && fechaLocal < fromLocal) return false;
+      if (toLocal && fechaLocal > toLocal) return false;
       return true;
     });
-    // Procesar los datos a CSV con todos los campos
-    const encabezados = [
-      "ID", "DocumentID", "Fecha", "IP", "User Agent", 
-      "Creado", "Actualizado", "Publicado",
-      // Datos del libro según schema.json
-      "Libro ID", "ID_Libro", "Título", "Autor", "Clasificación",
-      // Datos del usuario según schema.json
-      "Usuario ID", "Username", "Email", "Num Control", 
-      "Género", "Carrera", "Campus", "Estado", "Rol", "Apellido"
-    ];
+
+    // Función para formatear fechas
+    const formatearFecha = (fechaStr: string) => {
+      if (!fechaStr) return "";
+      const fecha = new Date(fechaStr);
+      return fecha.toLocaleString('es-MX', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        timeZone: 'America/Mexico_City'
+      });
+    };
+
+    // Obtener los encabezados seleccionados
+    const encabezados = columnasDisponibles
+      .filter(col => selectedColumns.includes(col.id))
+      .map(col => col.label);
+
+    // Procesar los datos a CSV
     const filas = filteredConsultas.map((consulta: any) => {
-      // Acceder a book y user que pueden ser null
       const book = consulta.book || {};
       const user = consulta.user || {};
-      // Lógica igual que en usuarios para carrera
+      
+      // Lógica para carrera y campus
       let carrera = "";
       if (user.carrera) {
         if (typeof user.carrera === 'object' && user.carrera !== null) {
-          if (user.carrera.Nombre) {
-            carrera = user.carrera.Nombre;
-          } else if (user.carrera.attributes && user.carrera.attributes.Nombre) {
-            carrera = user.carrera.attributes.Nombre;
-          }
+          carrera = user.carrera.attributes?.Nombre || user.carrera.Nombre || '';
         } else if (typeof user.carrera === 'string') {
           carrera = user.carrera;
         }
       }
-      // Lógica igual que en usuarios para campus
+
       let campus = "";
       if (user.campus) {
         if (typeof user.campus === 'object' && user.campus !== null) {
-          if (user.campus.Nombre) {
-            campus = user.campus.Nombre;
-          } else if (user.campus.attributes && user.campus.attributes.Nombre) {
-            campus = user.campus.attributes.Nombre;
-          }
+          campus = user.campus.attributes?.Nombre || user.campus.Nombre || '';
         } else if (typeof user.campus === 'string') {
           campus = user.campus;
         }
       }
-      return [
-        consulta.id,
-        consulta.documentId || "",
-        consulta.fecha || "",
-        consulta.ip || "",
-        consulta.user_agent || "",
-        consulta.createdAt || "",
-        consulta.updatedAt || "",
-        consulta.publishedAt || "",
-        // Datos del libro
-        book.id || "",
-        book.id_libro || "",
-        book.titulo || "",
-        book.autor || "",
-        book.clasificacion || "",
-        // Datos del usuario
-        user.id || "",
-        user.username || "",
-        user.email || "",
-        user.Numcontrol || "",
-        user.Genero || "",
-        carrera,
-        campus,
-        user.Estado || "",
-        user.rol || "",
-        user.apellido || ""
-      ];
+
+      // Mapeo de valores según las columnas seleccionadas
+      const valores: { [key: string]: string } = {
+        id: consulta.id,
+        documentId: consulta.documentId || "",
+        fecha: formatearFecha(consulta.fecha || consulta.createdAt),
+        ip: consulta.ip || "",
+        user_agent: consulta.user_agent || "",
+        createdAt: formatearFecha(consulta.createdAt),
+        updatedAt: formatearFecha(consulta.updatedAt),
+        publishedAt: formatearFecha(consulta.publishedAt),
+        book_id: book.id || "",
+        book_id_libro: book.id_libro || "",
+        book_titulo: book.titulo || "",
+        book_autor: book.autor || "",
+        book_clasificacion: book.clasificacion || "",
+        user_id: user.id || "",
+        user_username: user.username || "",
+        user_email: user.email || "",
+        user_numcontrol: user.Numcontrol || "",
+        user_genero: user.Genero || "",
+        user_carrera: carrera,
+        user_campus: campus,
+        user_estado: user.Estado || "",
+        user_rol: user.rol || "",
+        user_apellido: user.apellido || ""
+      };
+
+      // Asegurar el orden correcto de las columnas seleccionadas
+      return selectedColumns.map(colId => {
+        // Buscar la definición de la columna para obtener el label correcto si es necesario
+        const columna = columnasDisponibles.find(col => col.id === colId);
+        // Usar el colId para obtener el valor del objeto valores
+        return valores[colId];
+      });
     });
+
     const csv = [encabezados, ...filas]
       .map((row) => row.map((val: any) => `"${val}"`).join(","))
       .join("\n");
+
     // Descargar el archivo
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    saveAs(blob, "consultas_filtradas.csv");
-    // Mensaje de éxito
+    const filenameDatePart = formatFilenameDateRange(dateRange);
+    saveAs(blob, `reporte_${filenameDatePart}.csv`);
     console.log("CSV generado exitosamente");
-  } catch (apiError: any) {
-    console.error("Error en la API:", apiError);
-    let errorMessage = "Error al comunicarse con la API.";
-    if (apiError?.message) {
-      errorMessage += ` ${apiError.message}`;
+  } catch (error: any) {
+    console.error("Error al generar CSV:", error);
+    let errorMessage = "Error al generar el archivo CSV.";
+    if (error?.message) {
+      errorMessage += ` ${error.message}`;
     }
     alert(errorMessage);
   }
 }
 
-// Función para descargar las consultas como Excel
-async function descargarConsultasExcel(dateRange?: DateRange) {
+// Modificar la función de exportación a Excel de manera similar
+async function descargarConsultasExcel(dateRange?: DateRange, selectedColumns: string[] = columnasDisponibles.map(col => col.id)) {
   try {
-    console.log("Iniciando descarga de Excel usando api.ts...");
-    // Usar la función que trae todas las páginas con populate para incluir relaciones
-    const consultas = await fetchAllConsultas();
+    console.log("Iniciando descarga de Excel...");
+    
+    // Obtener las consultas actuales del estado
+    const consultasActuales = await fetchAllConsultas();
+    
     // Filtrar por rango de fechas seleccionado
-    const filteredConsultas = consultas.filter((consulta: any) => {
+    const filteredConsultas = consultasActuales.filter((consulta: any) => {
       if (!dateRange?.from && !dateRange?.to) return true;
       const fecha = new Date(consulta.fecha || consulta.createdAt);
-      if (dateRange?.from && fecha < dateRange.from) return false;
-      if (dateRange?.to && fecha > dateRange.to) return false;
+      const fechaLocal = new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
+      const fromLocal = dateRange?.from ? new Date(dateRange.from.getFullYear(), dateRange.from.getMonth(), dateRange.from.getDate()) : null;
+      const toLocal = dateRange?.to ? new Date(dateRange.to.getFullYear(), dateRange.to.getMonth(), dateRange.to.getDate()) : null;
+      
+      if (fromLocal && fechaLocal < fromLocal) return false;
+      if (toLocal && fechaLocal > toLocal) return false;
       return true;
     });
+
+    // Función para formatear fechas
+    const formatearFecha = (fechaStr: string) => {
+      if (!fechaStr) return "";
+      const fecha = new Date(fechaStr);
+      return fecha.toLocaleString('es-MX', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        timeZone: 'America/Mexico_City'
+      });
+    };
     
     // Obtener campus y carreras para referencia
     const campusRes = await fetch('http://localhost:1337/api/campuses?populate=*');
@@ -406,129 +543,111 @@ async function descargarConsultasExcel(dateRange?: DateRange) {
 
     // Procesar los datos para Excel
     const filas = filteredConsultas.map((consulta: any) => {
-      // Acceder a book y user que pueden ser null
       const book = consulta.book || {};
       const user = consulta.user || {};
 
-      // Lógica mejorada para carrera
+      // Lógica para carrera y campus
       let carrera = "";
       if (user.carrera) {
         if (typeof user.carrera === 'object' && user.carrera !== null) {
-          // Intentar obtener el nombre de la carrera de diferentes formas
-          carrera = user.carrera.attributes?.Nombre || 
-                   user.carrera.Nombre || 
-                   user.carrera.data?.attributes?.Nombre ||
-                   user.carrera.data?.Nombre || '';
-        } else if (typeof user.carrera === 'string' || typeof user.carrera === 'number') {
-          // Buscar en la lista de carreras
-          const careerObj = careers.find((c: any) => {
-            const careerId = c.id?.toString() || c.attributes?.id?.toString();
-            return careerId === user.carrera.toString();
-          });
-          carrera = careerObj?.attributes?.Nombre || 
-                   careerObj?.Nombre || 
-                   careerObj?.data?.attributes?.Nombre ||
-                   careerObj?.data?.Nombre || 
-                   user.carrera;
+          carrera = user.carrera.attributes?.Nombre || user.carrera.Nombre || '';
+        } else if (typeof user.carrera === 'string') {
+          carrera = user.carrera;
         }
       }
 
-      // Lógica mejorada para campus
       let campus = "";
       if (user.campus) {
         if (typeof user.campus === 'object' && user.campus !== null) {
-          // Intentar obtener el nombre del campus de diferentes formas
-          campus = user.campus.attributes?.Nombre || 
-                  user.campus.Nombre || 
-                  user.campus.data?.attributes?.Nombre ||
-                  user.campus.data?.Nombre || '';
-        } else if (typeof user.campus === 'string' || typeof user.campus === 'number') {
-          // Buscar en la lista de campus
-          const campusObj = campuses.find((c: any) => {
-            const campusId = c.id?.toString() || c.attributes?.id?.toString();
-            return campusId === user.campus.toString();
-          });
-          campus = campusObj?.attributes?.Nombre || 
-                  campusObj?.Nombre || 
-                  campusObj?.data?.attributes?.Nombre ||
-                  campusObj?.data?.Nombre || 
-                  user.campus;
+          campus = user.campus.attributes?.Nombre || user.campus.Nombre || '';
+        } else if (typeof user.campus === 'string') {
+          campus = user.campus;
         }
       }
 
-      // Si no se encontró campus pero hay carrera, intentar obtener el campus de la carrera
-      if (!campus && carrera) {
-        const careerObj = careers.find((c: any) => {
-          const careerName = c.attributes?.Nombre || c.Nombre || c.data?.attributes?.Nombre || c.data?.Nombre;
-          return careerName === carrera;
-        });
-        if (careerObj?.campus) {
-          campus = careerObj.campus.attributes?.Nombre || 
-                  careerObj.campus.Nombre || 
-                  careerObj.campus.data?.attributes?.Nombre ||
-                  careerObj.campus.data?.Nombre || '';
-        }
-      }
-
-      return {
-        "ID": consulta.id,
-        "DocumentID": consulta.documentId || "",
-        "Fecha": consulta.fecha || "",
-        "IP": consulta.ip || "",
-        "User Agent": consulta.user_agent || "",
-        "Creado": consulta.createdAt || "",
-        "Actualizado": consulta.updatedAt || "",
-        "Publicado": consulta.publishedAt || "",
-        // Datos del libro
-        "Libro ID": book.id || "",
-        "ID_Libro": book.id_libro || "",
-        "Título": book.titulo || "",
-        "Autor": book.autor || "",
-        "Clasificación": book.clasificacion || "",
-        // Datos del usuario
-        "Usuario ID": user.id || "",
-        "Username": user.username || "",
-        "Email": user.email || "",
-        "Num Control": user.Numcontrol || "",
-        "Género": user.Genero || "",
-        "Carrera": carrera,
-        "Campus": campus,
-        "Estado": user.Estado || "",
-        "Rol": user.rol || "",
-        "Apellido": user.apellido || ""
+      // Mapeo de valores según las columnas seleccionadas
+      const valores: { [key: string]: string } = {
+        id: consulta.id,
+        documentId: consulta.documentId || "",
+        fecha: formatearFecha(consulta.fecha || consulta.createdAt),
+        ip: consulta.ip || "",
+        user_agent: consulta.user_agent || "",
+        createdAt: formatearFecha(consulta.createdAt),
+        updatedAt: formatearFecha(consulta.updatedAt),
+        publishedAt: formatearFecha(consulta.publishedAt),
+        book_id: book.id || "",
+        book_id_libro: book.id_libro || "",
+        book_titulo: book.titulo || "",
+        book_autor: book.autor || "",
+        book_clasificacion: book.clasificacion || "",
+        user_id: user.id || "",
+        user_username: user.username || "",
+        user_email: user.email || "",
+        user_numcontrol: user.Numcontrol || "",
+        user_genero: user.Genero || "",
+        user_carrera: carrera,
+        user_campus: campus,
+        user_estado: user.Estado || "",
+        user_rol: user.rol || "",
+        user_apellido: user.apellido || ""
       };
+
+      // Crear objeto solo con las columnas seleccionadas en el orden correcto
+      const fila: { [key: string]: string } = {};
+      selectedColumns.forEach(colId => {
+        const columna = columnasDisponibles.find(col => col.id === colId);
+        if (columna) {
+          // Usar el label de la columna como clave y el valor del objeto valores
+          fila[columna.label] = valores[colId];
+        }
+      });
+
+      return fila;
     });
 
-    // Crear la hoja de Excel
-    const ws = XLSX.utils.json_to_sheet(filas);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Consultas");
-    
-    // Ajustar anchos de columna automáticamente
-    const colWidths = Object.keys(filas[0] || {}).map(k => 
-      Math.max(k.length, ...filas.map((f: any) => String(f[k] || '').length))
-    );
-    ws['!cols'] = colWidths.map(w => ({ wch: w }));
-    
-    // Generar y descargar el archivo
-    const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    // Crear el archivo Excel
+    const worksheet = XLSX.utils.json_to_sheet(filas);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Consultas");
+    const excelBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
     const blob = new Blob([excelBuffer], { type: "application/octet-stream" });
-    saveAs(blob, "consultas_filtradas.xlsx");
-    
-    // Mensaje de éxito
+    const filenameDatePart = formatFilenameDateRange(dateRange);
+    saveAs(blob, `reporte_${filenameDatePart}.xlsx`);
     console.log("Excel generado exitosamente");
-  } catch (apiError: any) {
-    console.error("Error en la API:", apiError);
-    let errorMessage = "Error al comunicarse con la API.";
-    if (apiError?.message) {
-      errorMessage += ` ${apiError.message}`;
+  } catch (error: any) {
+    console.error("Error al generar Excel:", error);
+    let errorMessage = "Error al generar el archivo Excel.";
+    if (error?.message) {
+      errorMessage += ` ${error.message}`;
     }
     alert(errorMessage);
   }
 }
 
+const formatFilenameDateRange = (dateRange?: DateRange) => {
+  const from = dateRange?.from;
+  const to = dateRange?.to;
+
+  const formatDatePart = (date: Date) => {
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    return `${year}${month}${day}`;
+  };
+
+  if (from && to) {
+    return `${formatDatePart(from)}_a_${formatDatePart(to)}`;
+  } else if (from) {
+    return `Desde_${formatDatePart(from)}`;
+  } else if (to) {
+    return `Hasta_${formatDatePart(to)}`;
+  } else {
+    return 'completo';
+  }
+};
+
 // Función para generar informe oficial
-async function generarInformeOficial() {
+async function generarInformeOficial(dateRange?: DateRange) {
   try {
     console.log('Iniciando generación de informe...');
     // Obtener datos de consultas
@@ -751,9 +870,13 @@ async function generarInformeOficial() {
     doc.text(`${fechaUltima}`, valueX, y);
     y += 2 * salto;
 
-    // Cierre
-    doc.setFont('helvetica', 'normal');
-    doc.text('Sin más por el momento, quedo de usted para cualquier duda o aclaración.', margin, y, {maxWidth: pageWidth - margin*2});
+    // Agregar línea sobre el rango del informe
+    const rangoInformeTexto = `Este informe abarca el período: ${formatDisplayDateRange(dateRange)}.`;
+    doc.text(rangoInformeTexto, margin, y, {maxWidth: pageWidth - margin * 2});
+    y += salto;
+    
+    // Párrafo de cierre
+    doc.text('Sin más por el momento, quedo de usted para cualquier duda o aclaración.', margin, y, {maxWidth: pageWidth - margin * 2});
     y += 2 * salto;
 
     // Firma institucional alineada a la izquierda y con formato de referencia
@@ -1399,10 +1522,37 @@ async function descargarUsuariosExcel() {
   }
 }
 
+// Helper function to format date range for display
+const formatDisplayDateRange = (dateRange?: DateRange) => {
+  const from = dateRange?.from;
+  const to = dateRange?.to;
+
+  const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' };
+
+  if (from && to) {
+    // Check if both dates are the same day
+    if (from.toDateString() === to.toDateString()) {
+      return from.toLocaleDateString('es-MX', options);
+    } else {
+      return `${from.toLocaleDateString('es-MX', options)} - ${to.toLocaleDateString('es-MX', options)}`;
+    }
+  } else if (from) {
+    return `Desde ${from.toLocaleDateString('es-MX', options)}`;
+  } else if (to) {
+    return `Hasta ${to.toLocaleDateString('es-MX', options)}`;
+  } else {
+    return 'Rango Completo';
+  }
+};
+
 export default function ReportesPage() {
   // Todos los hooks primero en un orden consistente
   const router = useRouter();
   const { permissions, isAuthenticated, loading: userLoading } = useUser();
+  
+  // Añadir nuevo estado para las consultas
+  const [consultas, setConsultas] = useState<any[]>([]);
+  const [isLoadingConsultas, setIsLoadingConsultas] = useState(true);
   
   // Estados para estadísticas y datos de gráficos
   const [prestamoStats, setPrestamoStats] = useState({
@@ -1471,6 +1621,11 @@ export default function ReportesPage() {
   // Estado para el tipo de rango seleccionado
   const [quickSelect, setQuickSelect] = useState<string>("custom");
 
+  // Añadir estado para las columnas seleccionadas
+  const [selectedColumns, setSelectedColumns] = useState<string[]>(
+    columnasDisponibles.filter(col => col.defaultSelected).map(col => col.id)
+  );
+
   // Cargar los préstamos una sola vez y guardarlos en loans
   useEffect(() => {
     const fetchLoans = async () => {
@@ -1512,6 +1667,25 @@ export default function ReportesPage() {
       document.head.removeChild(style);
     };
   }, []);
+
+  // Efecto para cargar las consultas al inicio
+  useEffect(() => {
+    const cargarConsultas = async () => {
+      try {
+        setIsLoadingConsultas(true);
+        const consultasData = await fetchAllConsultas();
+        setConsultas(consultasData);
+      } catch (error) {
+        console.error("Error al cargar consultas:", error);
+      } finally {
+        setIsLoadingConsultas(false);
+      }
+    };
+
+    if (!userLoading && permissions?.canAccessReportes) {
+      cargarConsultas();
+    }
+  }, [userLoading, permissions]);
 
   // Efecto para cargar los datos y estadísticas
   useEffect(() => {
@@ -1683,7 +1857,7 @@ export default function ReportesPage() {
         }
         
         // Contar préstamos por mes (últimos 12 meses)
-        filteredLoans.forEach(loan => {
+        filteredLoans.forEach((loan: Loan) => {
           const fechaPrestamo = new Date(loan.fecha_prestamo);
           const mesPrestamo = fechaPrestamo.getMonth();
           const añoPrestamo = fechaPrestamo.getFullYear();
@@ -2013,20 +2187,36 @@ export default function ReportesPage() {
         </div>
         
         <div className="flex flex-wrap items-center gap-2">
-          <DateRangePicker onDateRangeChange={setDateRange} onQuickSelectChange={setQuickSelect} />
-          
-          <div className="flex items-center gap-2">
-            <Button onClick={() => { descargarConsultasCSV(dateRange); }} variant="outline">
-              Descargar Consultas (CSV)
+          <DateRangePicker
+            onDateRangeChange={setDateRange}
+            onQuickSelectChange={setQuickSelect}
+          />
+          <ColumnSelector
+            selectedColumns={selectedColumns}
+            onColumnsChange={setSelectedColumns}
+          />
+          <Button
+            onClick={() => descargarConsultasCSV(dateRange, selectedColumns)}
+            className="flex items-center gap-2"
+          >
+            <FileDown className="h-4 w-4" />
+            Exportar CSV
             </Button>
-            <Button onClick={() => { descargarConsultasExcel(dateRange); }} variant="outline">
-              Descargar Consultas (Excel)
+          <Button
+            onClick={() => descargarConsultasExcel(dateRange, selectedColumns)}
+            className="flex items-center gap-2"
+          >
+            <FileDown className="h-4 w-4" />
+            Exportar Excel
             </Button>
-            <Button onClick={generarInformeOficial} variant="outline" className="bg-black text-white dark:bg-white dark:text-black tec:bg-tec-primary tec:text-white !hover:bg-black !hover:text-white dark:!hover:bg-white dark:!hover:text-black tec:!hover:bg-tec-primary tec:!hover:text-white">
+          <Button 
+            onClick={() => generarInformeOficial(dateRange)} 
+            variant="outline" 
+            className="bg-black text-white dark:bg-white dark:text-black tec:bg-tec-primary tec:text-white !hover:bg-black !hover:text-white dark:!hover:bg-white dark:!hover:text-black tec:!hover:bg-tec-primary tec:!hover:text-white"
+          >
               <FileText className="mr-2 h-4 w-4" />
-              Generar Informe Oficial
+              Generar Informe ({formatDisplayDateRange(dateRange)})
             </Button>
-          </div>
         </div>
       </div>
 

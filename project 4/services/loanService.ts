@@ -19,19 +19,27 @@ export interface Book {
 
 export interface User {
   id: number;
-  documentId: string;
   username: string;
   email: string;
-  Numcontrol: string;
   provider?: string;
   confirmed?: boolean;
   blocked?: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-  publishedAt?: string;
-  campus?: string;
+  role?: string;
+  createdAt: string;
+  updatedAt: string;
+  Numcontrol?: string;
+  numcontrol?: string;
   Carrera?: string;
   Genero?: string;
+  campus?: string | number | null;
+  documentId?: string;
+  Estado?: string;
+  rol?: string;
+  apellido?: string;
+  carrera?: { 
+    id?: number;
+    Nombre?: string;
+  };
 }
 
 export interface Loan {
@@ -263,21 +271,26 @@ export const loanService = {
 
       // Enviar correo de notificación
       try {
-        await emailService.sendLoanNotification({
-          id: response.data.id,
-          book: {
-            titulo: bookDetails.titulo,
-            autor: bookDetails.autor
-          },
-          usuario: {
-            email: userDetails.email,
-            username: userDetails.username
-          },
-          fecha_prestamo: loanData.fecha_prestamo,
-          fecha_devolucion_esperada: loanData.fecha_devolucion_esperada,
-          estado: loanData.estado || 'activo'
-        });
-        console.log("Correo de notificación enviado exitosamente");
+        // Verificar que los detalles del libro y usuario existen antes de enviar el correo
+        if (bookDetails && userDetails && bookDetails.titulo && bookDetails.autor && userDetails.email && userDetails.username) {
+          await emailService.sendLoanNotification({
+            id: response.data.id,
+            book: {
+              titulo: bookDetails.titulo,
+              autor: bookDetails.autor
+            },
+            usuario: {
+              email: userDetails.email,
+              username: userDetails.username
+            },
+            fecha_prestamo: loanData.fecha_prestamo,
+            fecha_devolucion_esperada: loanData.fecha_devolucion_esperada,
+            estado: loanData.estado || 'activo'
+          });
+          console.log("Correo de notificación enviado exitosamente");
+        } else {
+          console.warn("No se pudieron obtener los detalles completos del libro o usuario para enviar el correo de notificación");
+        }
       } catch (emailError) {
         console.error("Error al enviar correo de notificación:", emailError);
         // No lanzamos el error para no interrumpir la creación del préstamo
@@ -337,21 +350,26 @@ export const loanService = {
           const bookDetails = await bookService.getBook(loanData.book);
           const userDetails = await fetchAPI(`/api/users/${loanData.usuario}`);
 
-          await emailService.sendReturnReminder({
-            id: Number(id),
-            book: {
-              titulo: bookDetails.titulo,
-              autor: bookDetails.autor
-            },
-            usuario: {
-              email: userDetails.email,
-              username: userDetails.username
-            },
-            fecha_prestamo: loanData.fecha_prestamo || '',
-            fecha_devolucion_esperada: loanData.fecha_devolucion_esperada || '',
-            estado: loanData.estado
-          });
-          console.log("Correo de confirmación de devolución enviado exitosamente");
+          // Verificar que los detalles existen antes de enviar el correo
+          if (bookDetails && userDetails && bookDetails.titulo && bookDetails.autor && userDetails.email && userDetails.username) {
+            await emailService.sendReturnReminder({
+              id: Number(id),
+              book: {
+                titulo: bookDetails.titulo,
+                autor: bookDetails.autor
+              },
+              usuario: {
+                email: userDetails.email,
+                username: userDetails.username
+              },
+              fecha_prestamo: loanData.fecha_prestamo || '',
+              fecha_devolucion_esperada: loanData.fecha_devolucion_esperada || '',
+              estado: loanData.estado
+            });
+            console.log("Correo de confirmación de devolución enviado exitosamente");
+          } else {
+             console.warn("No se pudieron obtener los detalles completos del libro o usuario para enviar el correo de confirmación de devolución");
+          }
         } catch (emailError) {
           console.error("Error al enviar correo de confirmación:", emailError);
         }
@@ -877,5 +895,28 @@ export const loanService = {
     // Un libro es de literatura si su clasificación comienza con P (incluye PA, PQ, etc.)
     // o contiene explícitamente la palabra "literatura" en cualquier parte de la clasificación
     return clasificacion.startsWith("P") || clasificacion.toLowerCase().includes("literatura");
+  },
+
+  // Calcula días hábiles descontando feriados
+  calculateBusinessDaysWithHolidays: (
+    startDate: Date,
+    endDate: Date,
+    holidays: string[] = []
+  ): number => {
+    const feriadosSet = new Set(holidays.map(f => new Date(f).toISOString().split('T')[0]));
+    let businessDays = 0;
+    const currentDate = new Date(startDate);
+    currentDate.setDate(currentDate.getDate() + 1); // Empieza el día después de la devolución
+    endDate.setHours(0, 0, 0, 0);
+
+    while (currentDate < endDate) { // Hasta el día anterior a hoy
+      const dayOfWeek = currentDate.getDay();
+      const currentStr = currentDate.toISOString().split('T')[0];
+      if (dayOfWeek !== 0 && dayOfWeek !== 6 && !feriadosSet.has(currentStr)) {
+        businessDays++;
+      }
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    return businessDays;
   },
 }
