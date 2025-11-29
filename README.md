@@ -90,9 +90,6 @@ Las contribuciones son bienvenidas. Por favor, sigue estos pasos:
 
 Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) para más detalles.
 
-## Contacto 📧
-
-Miguel Rodríguez - [@migueldrlds](https://github.com/migueldrlds)
 
 ## Agradecimientos 🙏
 
